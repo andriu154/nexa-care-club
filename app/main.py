@@ -10,6 +10,8 @@ from .routes.checkin import router as checkin_router
 from .routes.export import router as export_router
 from .routes.scan import router as scan_router
 from .routes.ui import router as ui_router
+from .routes.encounters import router as encounters_router
+from .routes.clinical_notes import router as clinical_notes_router
 
 app = FastAPI(title="Nexa Care Club")
 
@@ -29,6 +31,8 @@ app.include_router(checkin_router)
 app.include_router(export_router)
 app.include_router(scan_router)
 app.include_router(ui_router)
+app.include_router(encounters_router)
+app.include_router(clinical_notes_router)
 
 @app.get("/")
 def root():
