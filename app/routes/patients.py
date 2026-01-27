@@ -12,14 +12,9 @@ from ..deps.auth import get_current_doctor
 
 router = APIRouter(prefix="/patients", tags=["Patients"])
 
-# ✅ aseguramos carpeta qrs
 QR_FOLDER = "qrs"
 os.makedirs(QR_FOLDER, exist_ok=True)
 
-
-# -----------------------------
-# Schemas
-# -----------------------------
 class PatientCreate(BaseModel):
     full_name: str = Field(min_length=1, max_length=150)
 
@@ -34,23 +29,11 @@ class PatientOut(BaseModel):
 class BulkPatientsRequest(BaseModel):
     names: List[str]
 
-
-# -----------------------------
-# Helpers
-# -----------------------------
-def _generate_qr(qr_id: str) -> str:
-    """
-    Genera un QR PNG en /qrs y devuelve la ruta.
-    """
+def generate_qr_png(qr_id: str) -> str:
     img = qrcode.make(qr_id)
     path = os.path.join(QR_FOLDER, f"{qr_id}.png")
     img.save(path)
     return path
-
-
-# -----------------------------
-# Endpoints (PROTEGIDOS con JWT)
-# -----------------------------
 
 @router.get("", response_model=List[PatientOut])
 def list_patients(
@@ -58,17 +41,11 @@ def list_patients(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor),
 ):
-    """
-    Lista pacientes.
-    - ?search= filtra por nombre (full_name).
-    """
     q = db.query(Patient)
     if search:
         s = f"%{search.strip()}%"
         q = q.filter(Patient.full_name.ilike(s))
-
     return q.order_by(Patient.id.desc()).all()
-
 
 @router.get("/{patient_id}", response_model=PatientOut)
 def get_patient(
@@ -81,17 +58,61 @@ def get_patient(
         raise HTTPException(status_code=404, detail="Paciente no encontrado")
     return patient
 
-
 @router.post("", response_model=PatientOut, status_code=201)
 def create_patient(
     payload: PatientCreate,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor),
 ):
-    """
-    Crea 1 paciente con QR.
-    - Evita duplicados exactos por full_name (puedes ajustar si quieres).
-    """
     name = payload.full_name.strip()
 
-    existing = db.query(Patient).filter(Patien
+    existing = db.query(Patient).filter(Patient.full_name == name).first()
+    if existing:
+        return existing
+
+    qr_id = str(uuid.uuid4())
+    generate_qr_png(qr_id)
+
+    patient = Patient(full_name=name, qr_code=qr_id)
+    db.add(patient)
+    db.commit()
+    db.refresh(patient)
+    return patient
+
+@router.post("/bulk")
+def create_patients_bulk(
+    data: BulkPatientsRequest,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor),
+):
+    created = []
+
+    for name in data.names:
+        clean_name = name.strip()
+        if not clean_name:
+            continue
+
+        existing = db.query(Patient).filter(Patient.full_name == clean_name).first()
+        if existing:
+            created.append({
+                "id": existing.id,
+                "full_name": existing.full_name,
+                "qr_code": existing.qr_code,
+                "qr_png": f"{QR_FOLDER}/{existing.qr_code}.png"
+            })
+            continue
+
+        qr_id = str(uuid.uuid4())
+        generate_qr_png(qr_id)
+
+        patient = Patient(full_name=clean_name, qr_code=qr_id)
+        db.add(patient)
+
+        created.append({
+            "full_name": clean_name,
+            "qr_code": qr_id,
+            "qr_png": f"{QR_FOLDER}/{qr_id}.png"
+        })
+
+    db.commit()
+    return {"created": created}
