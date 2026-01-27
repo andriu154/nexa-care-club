@@ -1,0 +1,49 @@
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from datetime import datetime
+
+from ..database import get_db
+from ..models import Patient, Attendance
+
+router = APIRouter(prefix="/checkin", tags=["Check-in"])
+
+@router.post("/{qr_code}")
+def check_in_patient(qr_code: str, doctor_id: int, db: Session = Depends(get_db)):
+    # 1️⃣ buscar paciente por QR
+    patient = db.query(Patient).filter(Patient.qr_code == qr_code).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Paciente no encontrado")
+
+    # 2️⃣ validar sesiones
+    if patient.completed_sessions >= patient.total_sessions:
+        return {
+            "message": "Protocolo ya completado",
+            "patient": patient.full_name,
+            "status": patient.status
+        }
+
+    # 3️⃣ aumentar sesión
+    patient.completed_sessions += 1
+
+    # 4️⃣ registrar asistencia
+    attendance = Attendance(
+        patient_id=patient.id,
+        doctor_id=doctor_id,
+        session_number=patient.completed_sessions,
+        timestamp=datetime.utcnow()
+    )
+    db.add(attendance)
+
+    # 5️⃣ actualizar estado
+    if patient.completed_sessions == patient.total_sessions:
+        patient.status = "Completado"
+
+    db.commit()
+
+    return {
+        "patient": patient.full_name,
+        "session": patient.completed_sessions,
+        "total_sessions": patient.total_sessions,
+        "status": patient.status,
+        "message": "Check-in registrado ✅"
+    }
