@@ -1,16 +1,30 @@
-# app/seed.py
-from sqlalchemy.orm import Session
-from .models import Doctor
+from app.database import SessionLocal
+from app.models import Doctor
 
-def seed_doctors(db: Session):
-    # Si ya existen doctores, no volver a insertar
-    existing = db.query(Doctor).count()
-    if existing > 0:
-        return
+DOCTORS = [
+    {
+        "name": "Dra. Yiria Rosario Collantes Santos",
+        "registration": "1312059627",
+        "specialty": "Médico General",
+    },
+    {
+        "name": "Dr. Miguel Andrés Herrería Rodríguez",
+        "registration": "1750785220",
+        "specialty": "Médico Cirujano",
+    },
+]
 
-    doctors = [
-        Doctor(name="Dra. Yiria Collantes", pin="1234"),
-        Doctor(name="Dr. Andrés Herrería", pin="5678"),
-    ]
-    db.add_all(doctors)
-    db.commit()
+def main():
+    db = SessionLocal()
+    try:
+        for d in DOCTORS:
+            exists = db.query(Doctor).filter(Doctor.name == d["name"]).first()
+            if not exists:
+                db.add(Doctor(**d))
+        db.commit()
+        print("✅ Doctores sembrados/actualizados")
+    finally:
+        db.close()
+
+if __name__ == "__main__":
+    main()
