@@ -22,9 +22,22 @@ class Patient(Base):
     __tablename__ = "patients"
 
     id = Column(Integer, primary_key=True, index=True)
+
     full_name = Column(String, nullable=False)
 
+    # ✅ NECESARIO para check-in por QR
+    qr_code = Column(String, unique=True, index=True, nullable=True)
+
+    # ✅ NECESARIO para control de sesiones
+    total_sessions = Column(Integer, default=0, nullable=False)
+    completed_sessions = Column(Integer, default=0, nullable=False)
+
+    # ✅ NECESARIO para estado
+    status = Column(String, default="Activo", nullable=False)
+
     encounters = relationship("Encounter", back_populates="patient")
+    attendances = relationship("Attendance", back_populates="patient")
+
 
 
 class Encounter(Base):
@@ -88,3 +101,19 @@ class EncounterEvolution(Base):
     content = Column(Text, nullable=False)
 
     encounter = relationship("Encounter", back_populates="evolutions")
+class Attendance(Base):
+    __tablename__ = "attendance"  # ✅ SINGULAR (igual que tu DB)
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
+    doctor_id = Column(Integer, ForeignKey("doctors.id"), nullable=True)
+
+    session_number = Column(Integer, nullable=False)
+    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # ✅ back_populates debe coincidir EXACTO con Patient.attendances
+    patient = relationship("Patient", back_populates="attendances")
+
+    # ✅ nombre plural para consistencia
+    doctor = relationship("Doctor", backref="attendances")
