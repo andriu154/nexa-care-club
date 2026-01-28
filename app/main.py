@@ -11,7 +11,7 @@ from .routes.scan import router as scan_router
 from .routes.ui import router as ui_router
 from .routes.encounters import router as encounters_router
 from .routes.clinical_notes import router as clinical_notes_router
-
+from fastapi.staticfiles import StaticFiles
 # ✅ PDF + Historial
 from .routes.pdf import router as pdf_router
 from .routes.history import router as history_router
@@ -32,7 +32,7 @@ app.include_router(scan_router)
 app.include_router(ui_router)
 app.include_router(encounters_router)
 app.include_router(clinical_notes_router)
-
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 # ✅ nuevas rutas
 app.include_router(pdf_router)
 app.include_router(history_router)

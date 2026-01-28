@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+
+{% block title %}
+  Atención #{{ enc.id }} <span class="muted">• {{ patient.full_name }}</span>
+{% endblock %}
+
+{% block actions %}
+  <a class="btn btn-ghost" href="/app/patients/{{ patient.id }}">Volver</a>
+  <a class="btn btn-ghost" href="{{ pdf_url }}" target="_blank">PDF</a>
+
+  {% if is_owner and not enc.ended_at %}
+    <form method="post" action="/app/encounters/{{ enc.id }}/end" style="display:inline;">
+      <button class="btn btn-primary" type="submit">Cerrar atención</button>
+    </form>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+  <div class="grid">
+    <!-- =========================
+         CARD: Nota clínica (FORM)
+         ========================= -->
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="h2">Nota clínica</div>
+          <div class="muted">
+            Profesional: {{ doc.name if doc else ("Doctor ID " ~ enc.doctor_id) }}
+            {% if doc and doc.specialty %} • {{ doc.specialty }}{% endif %}
+            {% if doc and doc.registration %} • Reg. {{ doc.registration }}{% endif %}
+          </div>
+        </div>
+
+        <div class="actions">
+          {% if enc.ended_at %}
+            <span class="badge badge-locked">Cerrada</span>
+          {% else %}
+            <span class="badge badge-open">Abierta</span>
+          {% endif %}
+
+          {% if enc.ended_at and editable %}
+            <span class="badge">Editable (20 min)</span>
+          {% elif enc.ended_at and not editable %}
+            <span class="badge badge-locked">Edición bloqueada</span>
+          {% endif %}
+
+          {% if not is_owner %}
+            <span class="badge">Solo lectura</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card-body">
+        <div class="row">
+          <div class="pill">Creada: {{ enc.created_at.strftime("%Y-%m-%d %H:%M") if enc.created_at else "—" }}</div>
+          <div class="pill">Cierre: {{ enc.ended_at.strftime("%Y-%m-%d %H:%M") if enc.ended_at else "—" }}</div>
+        </div>
+
+        <div style="height:14px"></div>
+
+        {% if not can_edit_note %}
+          <div class="empty">
+            <div class="empty-title">
+              {% if not is_owner %}
+                Esta atención fue registrada por otro profesional
+              {% else %}
+                Edición bloqueada
+              {% endif %}
+            </div>
+            <div class="muted">
+              {% if not is_owner %}
+                Puedes ver toda la información y descargar el PDF. Si necesitas corrección, agrega una Evolución/Addendum.
+              {% else %}
+                Ya pasó la ventana de 20 minutos luego del cierre. Para correcciones, usa Evolución/Addendum.
+              {% endif %}
+            </div>
+          </div>
+          <div style="height:14px"></div>
+        {% endif %}
+
+        <form method="post" action="/app/encounters/{{ enc.id }}/save-note">
+          <!-- disable inputs if cannot edit -->
+          {% set dis = "" if can_edit_note else "disabled" %}
+
+          <!-- Top mini fields -->
+          <div class="row" style="gap:10px; flex-wrap:wrap;">
+            <div style="flex:1; min-width:220px;">
+              <div class="muted" style="font-weight:700; margin-bottom:6px;">Tipo de atención</div>
+              <input class="input" name="visit_type" value="{{ enc.visit_type or 'Ambulatorio' }}" {{ dis }} />
+            </div>
+            <div style="flex:2; min-width:260px;">
+              <div class="muted" style="font-weight:700; margin-bottom:6px;">Motivo corto (para Timeline)</div>
+              <input class="input" name="chief_complaint_short" value="{{ enc.chief_complaint_short or '' }}" {{ dis }} />
+            </div>
+          </div>
+
+          <div style="height:14px"></div>
+
+          <!-- Vital signs -->
+          <div class="card" style="box-shadow:none;">
+            <div class="card-header" style="border-bottom:none;">
+              <div>
+                <div class="h2" style="font-size:16px;">Signos vitales</div>
+                <div class="muted">Completa solo lo necesario (opcional).</div>
+              </div>
+            </div>
+            <div class="card-body" style="padding-top:0;">
+              <div class="row" style="gap:10px; flex-wrap:wrap;">
+                <div style="flex:1; min-width:120px;">
+                  <div class="muted" style="font-weight:700; margin-bottom:6px;">TA Sistólica</div>
+                  <input class="input" name="ta_sys" value="{{ note.ta_sys if note else '' }}" {{ dis }} />
+                </div>
+                <div style="flex:1; min-width:120px;">
+                  <div class="muted" style="font-weight:700; margin-bottom:6px;">TA Diastólica</div>
+                  <input class="input" name="ta_dia" value="{{ note.ta_dia if note else '' }}" {{ dis }} />
+                </div>
+                <div style="flex:1; min-width:120px;">
+                  <div class="muted" style="font-weight:700; margin-bottom:6px;">FC</div>
+                  <input class="input" name="hr" value="{{ note.hr if note else '' }}" {{ dis }} />
+                </div>
+                <div style="flex:1; min-width:120px;">
+                  <div class="muted" style="font-weight:700; margin-bottom:6px;">FR</div>
+                  <input class="input" name="rr" value="{{ note.rr if note else '' }}" {{ dis }} />
+                </div>
+                <div style="flex:1; min-width:120px;">
+                  <div class="muted" style="font-weight:700; margin-bottom:6px;">Temp</div>
+                  <input class="input" name="temp" value="{{ note.temp if note else '' }}" {{ dis }} />
+                </div>
+                <div style="flex:1; min-width:120px;">
+                  <div class="muted" style="font-weight:700; margin-bottom:6px;">SpO2 %</div>
+                  <input class="input" name="spo2" value="{{ note.spo2 if note else '' }}" {{ dis }} />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="height:14px"></div>
+
+          <!-- Main note fields -->
+          <div class="muted" style="font-weight:800; margin-bottom:8px;">Motivo de consulta</div>
+          <textarea class="textarea" name="chief_complaint" {{ dis }}>{{ note.chief_complaint if note and note.chief_complaint else "" }}</textarea>
+
+          <div style="height:12px"></div>
+
+          <div class="muted" style="font-weight:800; margin-bottom:8px;">Enfermedad actual (HPI)</div>
+          <textarea class="textarea" name="hpi" {{ dis }}>{{ note.hpi if note and note.hpi else "" }}</textarea>
+
+          <div style="height:12px"></div>
+
+          <div class="muted" style="font-weight:800; margin-bottom:8px;">Examen físico</div>
+          <textarea class="textarea" name="physical_exam" {{ dis }}>{{ note.physical_exam if note and note.physical_exam else "" }}</textarea>
+
+          <div style="height:12px"></div>
+
+          <div class="muted" style="font-weight:800; margin-bottom:8px;">Exámenes complementarios</div>
+          <textarea class="textarea" name="complementary_tests" {{ dis }}>{{ note.complementary_tests if note and note.complementary_tests else "" }}</textarea>
+
+          <div style="height:12px"></div>
+
+          <div class="muted" style="font-weight:800; margin-bottom:8px;">Impresión diagnóstica</div>
+          <textarea class="textarea" name="assessment_dx" {{ dis }}>{{ note.assessment_dx if note and note.assessment_dx else "" }}</textarea>
+
+          <div style="height:12px"></div>
+
+          <div class="muted" style="font-weight:800; margin-bottom:8px;">Prescripción / Tratamiento</div>
+          <textarea class="textarea" name="plan_treatment" {{ dis }}>{{ note.plan_treatment if note and note.plan_treatment else "" }}</textarea>
+
+          <div style="height:12px"></div>
+
+          <div class="muted" style="font-weight:800; margin-bottom:8px;">Signos de alarma</div>
+          <textarea class="textarea" name="indications_alarm_signs" {{ dis }}>{{ note.indications_alarm_signs if note and note.indications_alarm_signs else "" }}</textarea>
+
+          <div style="height:12px"></div>
+
+          <div class="muted" style="font-weight:800; margin-bottom:8px;">Seguimiento</div>
+          <textarea class="textarea" name="follow_up" {{ dis }}>{{ note.follow_up if note and note.follow_up else "" }}</textarea>
+
+          <div style="height:14px"></div>
+
+          <div class="row" style="align-items:center;">
+            <div class="muted" style="max-width:520px;">
+              {% if can_edit_note %}
+                Guardar actualiza la nota y el “motivo corto” visible en el Timeline del paciente.
+              {% else %}
+                Modo solo lectura. Para correcciones usa Evolución/Addendum.
+              {% endif %}
+            </div>
+            <div class="actions">
+              {% if can_edit_note %}
+                <button class="btn btn-primary" type="submit">Guardar nota</button>
+              {% endif %}
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- =========================
+         CARD: Evoluciones / Addendum
+         ========================= -->
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="h2">Evoluciones / Addendum</div>
+          <div class="muted">Correcciones y seguimiento (siempre permitido).</div>
+        </div>
+      </div>
+
+      <div class="card-body">
+        <form method="post" action="/app/encounters/{{ enc.id }}/add-evolution">
+          <textarea class="textarea" name="content" placeholder="Escribe aquí la evolución / corrección / seguimiento..." required></textarea>
+          <div style="height:10px"></div>
+          <button class="btn btn-primary" type="submit">Agregar evolución</button>
+        </form>
+
+        <div style="height:18px"></div>
+
+        {% if evols|length == 0 %}
+          <div class="empty">
+            <div class="empty-title">Sin evoluciones</div>
+            <div class="muted">Aquí aparecerán los addendum en orden.</div>
+          </div>
+        {% endif %}
+
+        {% for ev in evols %}
+          <div class="evolution">
+            <div class="strong">{{ ev.created_at.strftime("%Y-%m-%d %H:%M") if ev.created_at else "" }}</div>
+            <div class="muted">Autor ID: {{ ev.author_doctor_id }}</div>
+            <div class="evolution-text">{{ ev.content }}</div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+{% endblock %}

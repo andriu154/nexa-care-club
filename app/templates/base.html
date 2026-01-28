@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>NexaCenter</title>
+  <link rel="stylesheet" href="/static/styles.css"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- Fuente elegante y legible -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark"></div>
+        <div>
+          <div class="brand-name">NexaCenter</div>
+          <div class="brand-sub">Plataforma clínica</div>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <a class="nav-item" href="/app/patients">Pacientes</a>
+        <a class="nav-item" href="/docs" target="_blank">API / Docs</a>
+      </nav>
+
+      <div class="usercard">
+        <div class="user-avatar">{{ (current_doctor.name[:1] if current_doctor else "N") }}</div>
+        <div class="user-meta">
+          <div class="user-name">{{ current_doctor.name if current_doctor else "—" }}</div>
+          <div class="user-role">
+            {{ current_doctor.specialty if current_doctor and current_doctor.specialty else "Profesional" }}
+            {% if current_doctor and current_doctor.registration %}
+              • Reg. {{ current_doctor.registration }}
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="topbar-title">{% block title %}{% endblock %}</div>
+        <div class="topbar-actions">{% block actions %}{% endblock %}</div>
+      </header>
+
+      <section class="content">
+        {% block content %}{% endblock %}
+      </section>
+    </main>
+  </div>
+</body>
+</html>

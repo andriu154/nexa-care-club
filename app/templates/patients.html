@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}Pacientes{% endblock %}
+
+{% block actions %}
+  <a class="btn btn-ghost" href="/docs" target="_blank">Abrir /docs</a>
+{% endblock %}
+
+{% block content %}
+  <div class="grid">
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="h2">Listado</div>
+          <div class="muted">Accede al historial, timeline y PDFs.</div>
+        </div>
+      </div>
+
+      <div class="table">
+        <div class="trow thead">
+          <div>ID</div>
+          <div>Paciente</div>
+          <div>QR</div>
+          <div>Sesiones</div>
+          <div>Estado</div>
+          <div></div>
+        </div>
+
+        {% for p in patients %}
+        <div class="trow">
+          <div class="mono">{{ p.id }}</div>
+          <div class="strong">{{ p.full_name }}</div>
+          <div class="mono">{{ p.qr_code or "-" }}</div>
+          <div>{{ p.completed_sessions }}/{{ p.total_sessions }}</div>
+          <div><span class="badge">{{ p.status }}</span></div>
+          <div class="tright">
+            <a class="btn btn-primary" href="/app/patients/{{ p.id }}">Abrir</a>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="card highlight">
+      <div class="card-header">
+        <div>
+          <div class="h2">Tip rápido</div>
+          <div class="muted">Crea pacientes desde /docs y luego gestionas todo desde aquí.</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="pill">POST /patients → full_name</div>
+        <div class="pill">POST /encounters → patient_id</div>
+        <div class="pill">PUT /encounters/{id}/note</div>
+        <div class="pill">GET /patients/{id}/history/pdf</div>
+      </div>
+    </div>
+  </div>
+{% endblock %}

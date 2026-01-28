@@ -1,103 +1,231 @@
-from fastapi import APIRouter
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Depends, Request, HTTPException
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
+from sqlalchemy.orm import Session
+from datetime import datetime, timedelta
+
+from ..database import get_db
+from ..deps.auth import get_current_doctor
+from ..models import Patient, Encounter, Doctor, ClinicalNote, EncounterEvolution
 
 router = APIRouter(tags=["UI"])
+templates = Jinja2Templates(directory="app/templates")
+
+
+def _is_editable(enc: Encounter) -> bool:
+    # Si está abierta: editable
+    if enc.ended_at is None:
+        return True
+    # Si cerró: editable solo 20 min
+    return datetime.utcnow() <= (enc.ended_at + timedelta(minutes=20))
+
 
 @router.get("/app", response_class=HTMLResponse)
-def app_home():
-    return """
-<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Nexa Care Club</title>
-  <style>
-    body{font-family:Arial,sans-serif;background:#fafafa;margin:0}
-    .wrap{max-width:520px;margin:0 auto;padding:16px}
-    .card{background:#fff;border:1px solid #e7e7e7;border-radius:16px;padding:16px;margin:12px 0;box-shadow:0 2px 8px rgba(0,0,0,.04)}
-    h2{margin:0 0 10px}
-    label{display:block;margin:10px 0 6px;color:#555;font-size:14px}
-    select,input,button{width:100%;padding:14px;font-size:16px;border-radius:12px;border:1px solid #ccc}
-    button{border:none;background:#111;color:#fff;font-weight:700;margin-top:12px;cursor:pointer}
-    .small{color:#666;font-size:13px}
-    .ok{color:#0a7;font-weight:700}
-    .err{color:#c00;font-weight:700}
-  </style>
-</head>
-<body>
-<div class="wrap">
-  <div class="card">
-    <h2>🩺 Nexa Care Club</h2>
-    <div class="small">Ingreso rápido para consulta (tablet/celular).</div>
-  </div>
+def ui_home(request: Request):
+    return RedirectResponse(url="/app/patients", status_code=302)
 
-  <div class="card">
-    <h2>🔐 Login Médico</h2>
 
-    <label>Médico</label>
-    <select id="doctor">
-      <option value="1">Dra. Yiria Collantes</option>
-      <option value="2">Dr. Andrés Herrería</option>
-    </select>
+@router.get("/app/patients", response_class=HTMLResponse)
+def ui_patients(request: Request, db: Session = Depends(get_db), current_doctor: Doctor = Depends(get_current_doctor)):
+    patients = db.query(Patient).order_by(Patient.id.desc()).all()
+    return templates.TemplateResponse(
+        "patients.html",
+        {"request": request, "current_doctor": current_doctor, "patients": patients},
+    )
 
-    <label>PIN</label>
-    <input id="pin" type="password" placeholder="Ej: 1234" inputmode="numeric"/>
 
-    <button id="login">Ingresar ✅</button>
-    <div id="status" class="small" style="margin-top:10px;">—</div>
-  </div>
+@router.get("/app/patients/{patient_id}", response_class=HTMLResponse)
+def ui_patient_detail(patient_id: int, request: Request, db: Session = Depends(get_db), current_doctor: Doctor = Depends(get_current_doctor)):
+    patient = db.query(Patient).filter(Patient.id == patient_id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Paciente no encontrado")
 
-  <div class="card" id="scanCard" style="display:none;">
-    <h2>📲 Escanear QR</h2>
-    <div class="small">Cuando estés lista, abre la cámara y escanea el QR del paciente.</div>
-    <button id="goScan">Abrir escáner</button>
-  </div>
-</div>
+    encounters = (
+        db.query(Encounter)
+        .filter(Encounter.patient_id == patient_id)
+        .order_by(Encounter.created_at.desc(), Encounter.id.desc())
+        .all()
+    )
 
-<script>
-  const statusEl = document.getElementById("status");
-  const scanCard = document.getElementById("scanCard");
+    items = []
+    for enc in encounters:
+        doc = db.query(Doctor).filter(Doctor.id == enc.doctor_id).first()
+        items.append(
+            {
+                "enc": enc,
+                "doc": doc,
+                "pdf_url": f"/encounters/{enc.id}/pdf",
+            }
+        )
 
-  function setStatus(msg, cls="small") {
-    statusEl.className = cls;
-    statusEl.textContent = msg;
-  }
+    return templates.TemplateResponse(
+        "patient_detail.html",
+        {
+            "request": request,
+            "current_doctor": current_doctor,
+            "patient": patient,
+            "items": items,
+            "pdf_consolidated_url": f"/patients/{patient.id}/history/pdf",
+        },
+    )
 
-  document.getElementById("login").addEventListener("click", async () => {
-    const doctor_id = Number(document.getElementById("doctor").value);
-    const pin = document.getElementById("pin").value.trim();
 
-    if (!pin) {
-      setStatus("Escribe tu PIN 🙏", "err");
-      return;
-    }
+@router.post("/app/patients/{patient_id}/new-encounter")
+def ui_new_encounter(patient_id: int, db: Session = Depends(get_db), current_doctor: Doctor = Depends(get_current_doctor)):
+    patient = db.query(Patient).filter(Patient.id == patient_id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Paciente no encontrado")
 
-    setStatus("Validando...", "small");
+    enc = Encounter(
+        patient_id=patient.id,
+        doctor_id=current_doctor.id,
+        visit_type="Ambulatorio",
+        chief_complaint_short="",
+        created_at=datetime.utcnow(),
+        ended_at=None,
+        is_signed=False,
+    )
+    db.add(enc)
+    db.commit()
+    db.refresh(enc)
 
-    const res = await fetch("/auth/login", {
-      method: "POST",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({doctor_id, pin})
-    });
+    return RedirectResponse(url=f"/app/encounters/{enc.id}", status_code=302)
 
-    const data = await res.json();
 
-    if (res.ok) {
-      setStatus("✅ Login exitoso. Lista para escanear.", "ok");
-      // Guardamos doctor_id en el navegador
-      localStorage.setItem("doctor_id", String(doctor_id));
-      scanCard.style.display = "block";
-    } else {
-      setStatus("❌ " + (data.detail || "No se pudo iniciar sesión"), "err");
-      scanCard.style.display = "none";
-    }
-  });
+@router.get("/app/encounters/{encounter_id}", response_class=HTMLResponse)
+def ui_encounter(encounter_id: int, request: Request, db: Session = Depends(get_db), current_doctor: Doctor = Depends(get_current_doctor)):
+    enc = db.query(Encounter).filter(Encounter.id == encounter_id).first()
+    if not enc:
+        raise HTTPException(status_code=404, detail="Consulta no encontrada")
 
-  document.getElementById("goScan").addEventListener("click", () => {
-    window.location.href = "/scan";
-  });
-</script>
-</body>
-</html>
-"""
+    patient = db.query(Patient).filter(Patient.id == enc.patient_id).first()
+    doc = db.query(Doctor).filter(Doctor.id == enc.doctor_id).first()
+
+    note = db.query(ClinicalNote).filter(ClinicalNote.encounter_id == encounter_id).first()
+    evols = (
+        db.query(EncounterEvolution)
+        .filter(EncounterEvolution.encounter_id == encounter_id)
+        .order_by(EncounterEvolution.created_at.asc())
+        .all()
+    )
+
+    editable_window = _is_editable(enc)
+    is_owner = (enc.doctor_id == current_doctor.id)
+    can_edit_note = is_owner and editable_window
+
+    return templates.TemplateResponse(
+        "encounter.html",
+        {
+            "request": request,
+            "current_doctor": current_doctor,
+            "enc": enc,
+            "patient": patient,
+            "doc": doc,
+            "note": note,
+            "evols": evols,
+            "editable": editable_window,
+            "is_owner": is_owner,
+            "can_edit_note": can_edit_note,
+            "pdf_url": f"/encounters/{enc.id}/pdf",
+        },
+    )
+
+
+@router.post("/app/encounters/{encounter_id}/save-note")
+async def ui_save_note(encounter_id: int, request: Request, db: Session = Depends(get_db), current_doctor: Doctor = Depends(get_current_doctor)):
+    enc = db.query(Encounter).filter(Encounter.id == encounter_id).first()
+    if not enc:
+        raise HTTPException(status_code=404, detail="Consulta no encontrada")
+
+    # 🔒 solo el dueño puede editar SU nota
+    if enc.doctor_id != current_doctor.id:
+        raise HTTPException(status_code=403, detail="No autorizado")
+
+    # ⏱️ ventana 20 min
+    if not _is_editable(enc):
+        raise HTTPException(
+            status_code=403,
+            detail="Ventana de edición cerrada (20 min). Usa Evolución/Addendum para correcciones."
+        )
+
+    form = await request.form()
+
+    # Guardar resumen corto en Encounter (opcional, pero premium)
+    enc.chief_complaint_short = (form.get("chief_complaint_short") or "").strip()[:120]
+    enc.visit_type = (form.get("visit_type") or enc.visit_type or "Ambulatorio").strip()[:50]
+
+    note = db.query(ClinicalNote).filter(ClinicalNote.encounter_id == encounter_id).first()
+    if not note:
+        note = ClinicalNote(encounter_id=encounter_id)
+        db.add(note)
+
+    # Textos
+    note.chief_complaint = (form.get("chief_complaint") or "").strip()
+    note.hpi = (form.get("hpi") or "").strip()
+    note.physical_exam = (form.get("physical_exam") or "").strip()
+    note.complementary_tests = (form.get("complementary_tests") or "").strip()
+    note.assessment_dx = (form.get("assessment_dx") or "").strip()
+    note.plan_treatment = (form.get("plan_treatment") or "").strip()
+    note.indications_alarm_signs = (form.get("indications_alarm_signs") or "").strip()
+    note.follow_up = (form.get("follow_up") or "").strip()
+
+    # Signos vitales helpers
+    def to_int(v):
+        v = (v or "").strip()
+        if v == "":
+            return None
+        try:
+            return int(v)
+        except Exception:
+            return None
+
+    note.ta_sys = to_int(form.get("ta_sys"))
+    note.ta_dia = to_int(form.get("ta_dia"))
+    note.hr = to_int(form.get("hr"))
+    note.rr = to_int(form.get("rr"))
+    note.spo2 = to_int(form.get("spo2"))
+
+    temp = (form.get("temp") or "").strip()
+    note.temp = temp if temp else None
+
+    db.commit()
+
+    return RedirectResponse(url=f"/app/encounters/{encounter_id}", status_code=302)
+
+
+@router.post("/app/encounters/{encounter_id}/end")
+def ui_end_encounter(encounter_id: int, db: Session = Depends(get_db), current_doctor: Doctor = Depends(get_current_doctor)):
+    enc = db.query(Encounter).filter(Encounter.id == encounter_id).first()
+    if not enc:
+        raise HTTPException(status_code=404, detail="Consulta no encontrada")
+
+    if enc.doctor_id != current_doctor.id:
+        raise HTTPException(status_code=403, detail="No autorizado")
+
+    if enc.ended_at is None:
+        enc.ended_at = datetime.utcnow()
+        db.commit()
+
+    return RedirectResponse(url=f"/app/encounters/{encounter_id}", status_code=302)
+
+
+@router.post("/app/encounters/{encounter_id}/add-evolution")
+async def ui_add_evolution(encounter_id: int, request: Request, db: Session = Depends(get_db), current_doctor: Doctor = Depends(get_current_doctor)):
+    enc = db.query(Encounter).filter(Encounter.id == encounter_id).first()
+    if not enc:
+        raise HTTPException(status_code=404, detail="Consulta no encontrada")
+
+    form = await request.form()
+    content = (form.get("content") or "").strip()
+    if not content:
+        return RedirectResponse(url=f"/app/encounters/{encounter_id}", status_code=302)
+
+    ev = EncounterEvolution(
+        encounter_id=encounter_id,
+        author_doctor_id=current_doctor.id,
+        content=content,
+    )
+    db.add(ev)
+    db.commit()
+
+    return RedirectResponse(url=f"/app/encounters/{encounter_id}", status_code=302)
