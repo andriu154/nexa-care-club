@@ -11,10 +11,6 @@ from .auth import get_logged_doctor
 router = APIRouter(tags=["UI"])
 templates = Jinja2Templates(directory="app/templates")
 
-# ⏱️ Config PRO
-AUTO_NO_SHOW_GRACE_MIN = 30   # después de end_at + 30 min => no_show automático si no se inició
-LATE_AFTER_MIN = 5            # después de start_at + 5 min => "Atención pendiente" (naranja)
-
 
 def _redirect_login():
     return RedirectResponse(url="/login", status_code=302)
@@ -51,11 +47,13 @@ def ui_dashboard(request: Request, db: Session = Depends(get_db), date: str | No
     if not current_doctor:
         return _redirect_login()
 
-    now = datetime.utcnow()
-
-    base_date = _parse_date(date) or now.date()
+    base_date = _parse_date(date) or datetime.utcnow().date()
     start_date = base_date - timedelta(days=1)  # ayer
     end_date = base_date + timedelta(days=7)    # +7 días
+
+    # ✅ FIX: pre-calcular prev/next para el template (NO usar timedelta dentro de Jinja)
+    prev_date = (base_date - timedelta(days=1)).isoformat()
+    next_date = (base_date + timedelta(days=1)).isoformat()
 
     start_dt = datetime(start_date.year, start_date.month, start_date.day, 0, 0, 0)
     end_dt = datetime(end_date.year, end_date.month, end_date.day, 23, 59, 59)
@@ -65,29 +63,11 @@ def ui_dashboard(request: Request, db: Session = Depends(get_db), date: str | No
         .filter(Appointment.doctor_id == current_doctor.id)
         .filter(Appointment.start_at >= start_dt)
         .filter(Appointment.start_at <= end_dt)
+        .filter(Appointment.status != "canceled")
         .order_by(Appointment.start_at.asc())
         .all()
     )
 
-    # ✅ Auto NO-SHOW (si ya pasó la ventana final y no se inició atención)
-    changed = False
-    no_show_cut = timedelta(minutes=AUTO_NO_SHOW_GRACE_MIN)
-
-    for a in appts:
-        if a.status in ("completed", "canceled", "no_show"):
-            continue
-        if a.encounter_id:
-            continue
-
-        if now > (a.end_at + no_show_cut):
-            a.status = "no_show"
-            a.updated_at = now
-            changed = True
-
-    if changed:
-        db.commit()
-
-    # agrupar por día
     days = {}
     for a in appts:
         k = a.start_at.date().isoformat()
@@ -107,13 +87,10 @@ def ui_dashboard(request: Request, db: Session = Depends(get_db), date: str | No
             "base_date": base_date,
             "start_date": start_date,
             "end_date": end_date,
+            "prev_date": prev_date,
+            "next_date": next_date,
             "ordered_days": ordered_days,
             "days": days,
-
-            # ✅ para lógica UI
-            "now_utc": now,
-            "timedelta": timedelta,
-            "late_after_min": LATE_AFTER_MIN,
         },
     )
 
@@ -315,12 +292,6 @@ def ui_end_encounter(encounter_id: int, request: Request, db: Session = Depends(
 
     if enc.ended_at is None:
         enc.ended_at = datetime.utcnow()
-
-        # ✅ si viene de una cita, marcarla como atendida
-        if enc.appointment:
-            enc.appointment.status = "completed"
-            enc.appointment.updated_at = datetime.utcnow()
-
         db.commit()
 
     return RedirectResponse(url=f"/app/encounters/{encounter_id}", status_code=302)

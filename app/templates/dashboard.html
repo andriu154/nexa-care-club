@@ -19,9 +19,9 @@
       </div>
 
       <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-        <a class="btn btn-ghost" href="/app?date={{ (base_date - timedelta(days=1)).isoformat() }}">◀ Día anterior</a>
+        <a class="btn btn-ghost" href="/app?date={{ prev_date }}">◀ Día anterior</a>
         <a class="btn btn-ghost" href="/app">Hoy</a>
-        <a class="btn btn-ghost" href="/app?date={{ (base_date + timedelta(days=1)).isoformat() }}">Día siguiente ▶</a>
+        <a class="btn btn-ghost" href="/app?date={{ next_date }}">Día siguiente ▶</a>
 
         <form method="get" action="/app" style="display:flex; gap:8px; align-items:center;">
           <input class="input" type="date" name="date" value="{{ base_date }}" style="min-width:170px;">
@@ -43,39 +43,6 @@
       {% else %}
         <div class="list" style="margin-top:10px;">
           {% for a in days[day] %}
-            {% set start_window = a.start_at - timedelta(minutes=15) %}
-            {% set end_window = a.end_at + timedelta(minutes=30) %}
-            {% set can_start = (start_window <= now_utc <= end_window) and (not a.encounter_id) and (a.status not in ["canceled", "no_show", "completed"]) %}
-
-            {% set late_after = a.start_at + timedelta(minutes=late_after_min) %}
-            {% set is_pending = (now_utc >= late_after) and (not a.encounter_id) and (a.status not in ["canceled", "no_show", "completed"]) and (now_utc <= end_window) %}
-
-            {% set badge_text = a.status %}
-            {% set badge_bg = "rgba(255,255,255,0.10)" %}
-            {% set badge_border = "rgba(255,255,255,0.18)" %}
-
-            {% if a.status == "completed" %}
-              {% set badge_text = "Atendido" %}
-              {% set badge_bg = "rgba(46, 204, 113, 0.20)" %}
-              {% set badge_border = "rgba(46, 204, 113, 0.35)" %}
-            {% elif a.status == "no_show" %}
-              {% set badge_text = "No asiste" %}
-              {% set badge_bg = "rgba(231, 76, 60, 0.20)" %}
-              {% set badge_border = "rgba(231, 76, 60, 0.35)" %}
-            {% elif a.status == "canceled" %}
-              {% set badge_text = "Cancelada" %}
-              {% set badge_bg = "rgba(255,255,255,0.08)" %}
-              {% set badge_border = "rgba(255,255,255,0.14)" %}
-            {% elif is_pending %}
-              {% set badge_text = "Atención pendiente" %}
-              {% set badge_bg = "rgba(243, 156, 18, 0.20)" %}
-              {% set badge_border = "rgba(243, 156, 18, 0.35)" %}
-            {% else %}
-              {% set badge_text = "Programada" %}
-              {% set badge_bg = "rgba(52, 152, 219, 0.18)" %}
-              {% set badge_border = "rgba(52, 152, 219, 0.30)" %}
-            {% endif %}
-
             <div style="display:flex; gap:12px; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid rgba(255,255,255,0.06);">
               <div style="min-width:120px;">
                 <strong>{{ a.start_at.strftime("%H:%M") }}</strong>
@@ -89,58 +56,26 @@
                 </div>
               </div>
 
-              <div style="min-width:150px; text-align:right;">
-                <span style="display:inline-block; padding:6px 10px; border-radius:999px; background:{{ badge_bg }}; border:1px solid {{ badge_border }};">
-                  {{ badge_text }}
-                </span>
+              <div class="muted" style="min-width:110px; text-align:right;">
+                {{ a.status }}
               </div>
 
-              <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-end;">
-                {% if a.encounter_id or a.status == "completed" %}
-                  {% if a.encounter_id %}
-                    <a class="btn btn-primary" href="/app/encounters/{{ a.encounter_id }}">Abrir atención</a>
-                  {% else %}
-                    <button class="btn btn-ghost" type="button" disabled>Atendido</button>
-                  {% endif %}
+              <div style="display:flex; gap:8px; align-items:center;">
+                <form method="post" action="/app/appointments/{{ a.id }}/cancel?date={{ base_date }}" style="display:inline;">
+                  <button class="btn btn-ghost" type="submit">Cancelar</button>
+                </form>
 
-                {% elif a.status in ["no_show", "canceled"] %}
-                  <button class="btn btn-ghost" type="button" disabled>{{ badge_text }}</button>
-
-                {% else %}
-                  {% if can_start %}
-                    <form method="post" action="/app/appointments/{{ a.id }}/start?date={{ base_date }}" style="display:inline;">
-                      <button class="btn btn-primary" type="submit">Iniciar atención</button>
-                    </form>
-                  {% else %}
-                    <button class="btn btn-ghost" type="button" disabled>Iniciar atención</button>
-                  {% endif %}
-
-                  <details>
-                    <summary class="btn btn-ghost" style="cursor:pointer;">No asiste</summary>
-                    <form method="post" action="/app/appointments/{{ a.id }}/no-show?date={{ base_date }}" style="margin-top:10px;">
-                      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                        <input class="input" type="text" name="reason_no_show" placeholder="Motivo (obligatorio) — ej: canceló / no respondió" required style="min-width:280px;">
-                        <button class="btn btn-primary" type="submit">Confirmar</button>
-                      </div>
-                    </form>
-                  </details>
-
-                  <form method="post" action="/app/appointments/{{ a.id }}/cancel?date={{ base_date }}" style="display:inline;">
-                    <button class="btn btn-ghost" type="submit">Cancelar</button>
+                <details>
+                  <summary class="btn btn-ghost" style="cursor:pointer;">Reagendar</summary>
+                  <form method="post" action="/app/appointments/{{ a.id }}/reschedule" style="margin-top:10px;">
+                    <input class="input" type="hidden" name="date" value="{{ day }}">
+                    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                      <input class="input" type="time" name="time" value="{{ a.start_at.strftime('%H:%M') }}" required>
+                      <input class="input" type="number" name="duration_min" value="{{ ((a.end_at - a.start_at).seconds // 60) }}" min="10" max="240" required>
+                      <button class="btn btn-primary" type="submit">Guardar</button>
+                    </div>
                   </form>
-
-                  <details>
-                    <summary class="btn btn-ghost" style="cursor:pointer;">Reagendar</summary>
-                    <form method="post" action="/app/appointments/{{ a.id }}/reschedule" style="margin-top:10px;">
-                      <input class="input" type="hidden" name="date" value="{{ day }}">
-                      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                        <input class="input" type="time" name="time" value="{{ a.start_at.strftime('%H:%M') }}" required>
-                        <input class="input" type="number" name="duration_min" value="{{ ((a.end_at - a.start_at).seconds // 60) }}" min="10" max="240" required>
-                        <button class="btn btn-primary" type="submit">Guardar</button>
-                      </div>
-                    </form>
-                  </details>
-                {% endif %}
+                </details>
               </div>
             </div>
           {% endfor %}
