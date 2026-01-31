@@ -19,7 +19,7 @@ from .routes.pdf import router as pdf_router
 from .routes.history import router as history_router
 from .routes.login_ui import router as login_ui_router
 from .routes.appointments_ui import router as appointments_ui_router
-
+from starlette.middleware.sessions import SessionMiddleware
 
 app = FastAPI(title="NexaCenter")
 
@@ -48,6 +48,7 @@ app.include_router(pdf_router)
 app.include_router(history_router)
 app.include_router(login_ui_router)
 app.include_router(appointments_ui_router)
+app.add_middleware(SessionMiddleware, secret_key="cambia-esto-por-uno-seguro")
 
 # 3) archivos estáticos
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
