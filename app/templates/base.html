@@ -7,7 +7,6 @@
   <link rel="stylesheet" href="/static/styles.css"/>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <!-- Fuente elegante y legible -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 
@@ -23,8 +22,15 @@
       </div>
 
       <nav class="nav">
+        <a class="nav-item" href="/app">Agenda</a>
         <a class="nav-item" href="/app/patients">Pacientes</a>
         <a class="nav-item" href="/docs" target="_blank">API / Docs</a>
+
+        {% if current_doctor %}
+          <form method="post" action="/logout" style="margin-top:12px;">
+            <button class="btn btn-ghost" type="submit" style="width:100%;">Salir</button>
+          </form>
+        {% endif %}
       </nav>
 
       <div class="usercard">

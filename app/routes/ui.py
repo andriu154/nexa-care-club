@@ -1,71 +1,145 @@
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, Request, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
-from typing import Optional
 
 from ..database import get_db
-from ..deps.auth import get_current_doctor
-from ..models import Patient, Encounter, Doctor, ClinicalNote, EncounterEvolution
+from ..models import Appointment, Patient, Encounter, Doctor, ClinicalNote, EncounterEvolution
+from .auth import get_logged_doctor
 
 router = APIRouter(tags=["UI"])
 templates = Jinja2Templates(directory="app/templates")
 
-
-def _is_editable(enc: Encounter) -> bool:
-    # Si está abierta: editable
-    if enc.ended_at is None:
-        return True
-    # Si cerró: editable solo 20 min
-    return datetime.utcnow() <= (enc.ended_at + timedelta(minutes=20))
+# ⏱️ Config PRO
+AUTO_NO_SHOW_GRACE_MIN = 30   # después de end_at + 30 min => no_show automático si no se inició
+LATE_AFTER_MIN = 5            # después de start_at + 5 min => "Atención pendiente" (naranja)
 
 
-# ✅ Helper: doctor opcional para GET (UI pública de prueba)
-def get_current_doctor_optional(request: Request) -> Optional[Doctor]:
-    """
-    Intenta obtener el doctor desde Authorization: Bearer <token>.
-    Si no hay token o falla, devuelve None para permitir ver la UI en modo público.
-    """
+def _redirect_login():
+    return RedirectResponse(url="/login", status_code=302)
+
+
+def _require_login(request: Request, db: Session):
+    doctor = get_logged_doctor(request, db)
+    if not doctor:
+        return None
+    return doctor
+
+
+def _parse_date(s: str | None):
+    if not s:
+        return None
     try:
-        auth = request.headers.get("Authorization") or ""
-        if not auth.startswith("Bearer "):
-            return None
-        # Llamamos al mismo validador real, pero atrapamos errores
-        return get_current_doctor(request)  # tu función ya usa Request
+        return datetime.strptime(s, "%Y-%m-%d").date()
     except Exception:
         return None
 
 
+def _is_editable(enc: Encounter) -> bool:
+    if enc.ended_at is None:
+        return True
+    return datetime.utcnow() <= (enc.ended_at + timedelta(minutes=20))
+
+
+# =========================
+# DASHBOARD (ayer → +7 días)
+# =========================
 @router.get("/app", response_class=HTMLResponse)
-def ui_home(request: Request):
-    return RedirectResponse(url="/app/patients", status_code=302)
+def ui_dashboard(request: Request, db: Session = Depends(get_db), date: str | None = None):
+    current_doctor = _require_login(request, db)
+    if not current_doctor:
+        return _redirect_login()
 
+    now = datetime.utcnow()
 
-@router.get("/app/patients", response_class=HTMLResponse)
-def ui_patients(
-    request: Request,
-    db: Session = Depends(get_db),
-    current_doctor: Optional[Doctor] = Depends(get_current_doctor_optional),
-):
-    patients = db.query(Patient).order_by(Patient.id.desc()).all()
+    base_date = _parse_date(date) or now.date()
+    start_date = base_date - timedelta(days=1)  # ayer
+    end_date = base_date + timedelta(days=7)    # +7 días
+
+    start_dt = datetime(start_date.year, start_date.month, start_date.day, 0, 0, 0)
+    end_dt = datetime(end_date.year, end_date.month, end_date.day, 23, 59, 59)
+
+    appts = (
+        db.query(Appointment)
+        .filter(Appointment.doctor_id == current_doctor.id)
+        .filter(Appointment.start_at >= start_dt)
+        .filter(Appointment.start_at <= end_dt)
+        .order_by(Appointment.start_at.asc())
+        .all()
+    )
+
+    # ✅ Auto NO-SHOW (si ya pasó la ventana final y no se inició atención)
+    changed = False
+    no_show_cut = timedelta(minutes=AUTO_NO_SHOW_GRACE_MIN)
+
+    for a in appts:
+        if a.status in ("completed", "canceled", "no_show"):
+            continue
+        if a.encounter_id:
+            continue
+
+        if now > (a.end_at + no_show_cut):
+            a.status = "no_show"
+            a.updated_at = now
+            changed = True
+
+    if changed:
+        db.commit()
+
+    # agrupar por día
+    days = {}
+    for a in appts:
+        k = a.start_at.date().isoformat()
+        days.setdefault(k, []).append(a)
+
+    ordered_days = []
+    d = start_date
+    while d <= end_date:
+        ordered_days.append(d.isoformat())
+        d += timedelta(days=1)
+
     return templates.TemplateResponse(
-        "patients.html",
+        "dashboard.html",
         {
             "request": request,
-            "current_doctor": current_doctor,  # puede ser None
-            "patients": patients,
+            "current_doctor": current_doctor,
+            "base_date": base_date,
+            "start_date": start_date,
+            "end_date": end_date,
+            "ordered_days": ordered_days,
+            "days": days,
+
+            # ✅ para lógica UI
+            "now_utc": now,
+            "timedelta": timedelta,
+            "late_after_min": LATE_AFTER_MIN,
         },
     )
 
 
+# =========================
+# PACIENTES
+# =========================
+@router.get("/app/patients", response_class=HTMLResponse)
+def ui_patients(request: Request, db: Session = Depends(get_db)):
+    current_doctor = _require_login(request, db)
+    if not current_doctor:
+        return _redirect_login()
+
+    patients = db.query(Patient).order_by(Patient.id.desc()).all()
+    return templates.TemplateResponse(
+        "patients.html",
+        {"request": request, "current_doctor": current_doctor, "patients": patients},
+    )
+
+
 @router.get("/app/patients/{patient_id}", response_class=HTMLResponse)
-def ui_patient_detail(
-    patient_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_doctor: Optional[Doctor] = Depends(get_current_doctor_optional),
-):
+def ui_patient_detail(patient_id: int, request: Request, db: Session = Depends(get_db)):
+    current_doctor = _require_login(request, db)
+    if not current_doctor:
+        return _redirect_login()
+
     patient = db.query(Patient).filter(Patient.id == patient_id).first()
     if not patient:
         raise HTTPException(status_code=404, detail="Paciente no encontrado")
@@ -80,19 +154,13 @@ def ui_patient_detail(
     items = []
     for enc in encounters:
         doc = db.query(Doctor).filter(Doctor.id == enc.doctor_id).first()
-        items.append(
-            {
-                "enc": enc,
-                "doc": doc,
-                "pdf_url": f"/encounters/{enc.id}/pdf",
-            }
-        )
+        items.append({"enc": enc, "doc": doc, "pdf_url": f"/encounters/{enc.id}/pdf"})
 
     return templates.TemplateResponse(
         "patient_detail.html",
         {
             "request": request,
-            "current_doctor": current_doctor,  # puede ser None
+            "current_doctor": current_doctor,
             "patient": patient,
             "items": items,
             "pdf_consolidated_url": f"/patients/{patient.id}/history/pdf",
@@ -101,11 +169,11 @@ def ui_patient_detail(
 
 
 @router.post("/app/patients/{patient_id}/new-encounter")
-def ui_new_encounter(
-    patient_id: int,
-    db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor),  # 🔒 sigue protegido
-):
+def ui_new_encounter(patient_id: int, request: Request, db: Session = Depends(get_db)):
+    current_doctor = _require_login(request, db)
+    if not current_doctor:
+        return _redirect_login()
+
     patient = db.query(Patient).filter(Patient.id == patient_id).first()
     if not patient:
         raise HTTPException(status_code=404, detail="Paciente no encontrado")
@@ -126,13 +194,15 @@ def ui_new_encounter(
     return RedirectResponse(url=f"/app/encounters/{enc.id}", status_code=302)
 
 
+# =========================
+# ENCOUNTER
+# =========================
 @router.get("/app/encounters/{encounter_id}", response_class=HTMLResponse)
-def ui_encounter(
-    encounter_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_doctor: Optional[Doctor] = Depends(get_current_doctor_optional),
-):
+def ui_encounter(encounter_id: int, request: Request, db: Session = Depends(get_db)):
+    current_doctor = _require_login(request, db)
+    if not current_doctor:
+        return _redirect_login()
+
     enc = db.query(Encounter).filter(Encounter.id == encounter_id).first()
     if not enc:
         raise HTTPException(status_code=404, detail="Consulta no encontrada")
@@ -149,20 +219,14 @@ def ui_encounter(
     )
 
     editable_window = _is_editable(enc)
-
-    # ✅ Si no hay sesión/token: solo lectura
-    if current_doctor is None:
-        is_owner = False
-        can_edit_note = False
-    else:
-        is_owner = (enc.doctor_id == current_doctor.id)
-        can_edit_note = is_owner and editable_window
+    is_owner = (enc.doctor_id == current_doctor.id)
+    can_edit_note = is_owner and editable_window
 
     return templates.TemplateResponse(
         "encounter.html",
         {
             "request": request,
-            "current_doctor": current_doctor,  # puede ser None
+            "current_doctor": current_doctor,
             "enc": enc,
             "patient": patient,
             "doc": doc,
@@ -177,21 +241,18 @@ def ui_encounter(
 
 
 @router.post("/app/encounters/{encounter_id}/save-note")
-async def ui_save_note(
-    encounter_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor),  # 🔒 protegido
-):
+async def ui_save_note(encounter_id: int, request: Request, db: Session = Depends(get_db)):
+    current_doctor = _require_login(request, db)
+    if not current_doctor:
+        return _redirect_login()
+
     enc = db.query(Encounter).filter(Encounter.id == encounter_id).first()
     if not enc:
         raise HTTPException(status_code=404, detail="Consulta no encontrada")
 
-    # 🔒 solo el dueño puede editar SU nota
     if enc.doctor_id != current_doctor.id:
         raise HTTPException(status_code=403, detail="No autorizado")
 
-    # ⏱️ ventana 20 min
     if not _is_editable(enc):
         raise HTTPException(
             status_code=403,
@@ -200,7 +261,6 @@ async def ui_save_note(
 
     form = await request.form()
 
-    # Guardar resumen corto en Encounter (opcional, pero premium)
     enc.chief_complaint_short = (form.get("chief_complaint_short") or "").strip()[:120]
     enc.visit_type = (form.get("visit_type") or enc.visit_type or "Ambulatorio").strip()[:50]
 
@@ -209,7 +269,6 @@ async def ui_save_note(
         note = ClinicalNote(encounter_id=encounter_id)
         db.add(note)
 
-    # Textos
     note.chief_complaint = (form.get("chief_complaint") or "").strip()
     note.hpi = (form.get("hpi") or "").strip()
     note.physical_exam = (form.get("physical_exam") or "").strip()
@@ -219,7 +278,6 @@ async def ui_save_note(
     note.indications_alarm_signs = (form.get("indications_alarm_signs") or "").strip()
     note.follow_up = (form.get("follow_up") or "").strip()
 
-    # Signos vitales helpers
     def to_int(v):
         v = (v or "").strip()
         if v == "":
@@ -243,11 +301,11 @@ async def ui_save_note(
 
 
 @router.post("/app/encounters/{encounter_id}/end")
-def ui_end_encounter(
-    encounter_id: int,
-    db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor),  # 🔒 protegido
-):
+def ui_end_encounter(encounter_id: int, request: Request, db: Session = Depends(get_db)):
+    current_doctor = _require_login(request, db)
+    if not current_doctor:
+        return _redirect_login()
+
     enc = db.query(Encounter).filter(Encounter.id == encounter_id).first()
     if not enc:
         raise HTTPException(status_code=404, detail="Consulta no encontrada")
@@ -257,18 +315,23 @@ def ui_end_encounter(
 
     if enc.ended_at is None:
         enc.ended_at = datetime.utcnow()
+
+        # ✅ si viene de una cita, marcarla como atendida
+        if enc.appointment:
+            enc.appointment.status = "completed"
+            enc.appointment.updated_at = datetime.utcnow()
+
         db.commit()
 
     return RedirectResponse(url=f"/app/encounters/{encounter_id}", status_code=302)
 
 
 @router.post("/app/encounters/{encounter_id}/add-evolution")
-async def ui_add_evolution(
-    encounter_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor),  # 🔒 protegido
-):
+async def ui_add_evolution(encounter_id: int, request: Request, db: Session = Depends(get_db)):
+    current_doctor = _require_login(request, db)
+    if not current_doctor:
+        return _redirect_login()
+
     enc = db.query(Encounter).filter(Encounter.id == encounter_id).first()
     if not enc:
         raise HTTPException(status_code=404, detail="Consulta no encontrada")

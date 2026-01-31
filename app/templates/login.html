@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}Login{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 420px; margin: 48px auto;">
+  <h2 style="margin-top:0;">Ingreso médico</h2>
+  <p class="muted">NexaCenter · Acceso profesional</p>
+
+  {% if error %}
+    <div class="alert" style="margin: 12px 0;">
+      {{ error }}
+    </div>
+  {% endif %}
+
+  <form method="post" action="/login">
+    <label class="label">Registro profesional</label>
+    <input
+      class="input"
+      type="text"
+      name="registration"
+      placeholder="Ej: 1312059627"
+      required
+    />
+
+    <label class="label" style="margin-top:12px;">Contraseña</label>
+    <input
+      class="input"
+      type="password"
+      name="password"
+      placeholder="••••••••"
+      required
+    />
+
+    <button
+      class="btn btn-primary"
+      type="submit"
+      style="margin-top:16px; width:100%;"
+    >
+      Entrar
+    </button>
+  </form>
+</div>
+{% endblock %}
