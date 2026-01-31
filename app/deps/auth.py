@@ -1,69 +1,34 @@
-from datetime import datetime
-from fastapi import APIRouter, Depends, Request, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
+# =========================
+# ✅ app/deps/auth.py
+# (JWT Bearer para endpoints API, NO UI)
+# =========================
+from fastapi import Depends, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
-from passlib.context import CryptContext
 
 from ..database import get_db
 from ..models import Doctor
+from ..security.jwt import decode_token
 
-router = APIRouter(tags=["Auth UI"])
-templates = Jinja2Templates(directory="app/templates")
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+bearer_scheme = HTTPBearer(auto_error=False)
 
 
-def get_logged_doctor(request: Request, db: Session) -> Doctor | None:
-    doctor_id = request.session.get("doctor_id") if hasattr(request, "session") else None
-    if not doctor_id:
-        return None
-    return db.query(Doctor).filter(Doctor.id == int(doctor_id)).first()
-
-
-@router.get("/login", response_class=HTMLResponse)
-def login_form(request: Request):
-    return templates.TemplateResponse(
-        "login.html",
-        {"request": request, "error": None},
-    )
-
-
-@router.post("/login")
-def login_submit(
-    request: Request,
+def get_current_doctor(
+    creds: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: Session = Depends(get_db),
-    registration: str = Form(...),
-    password: str = Form(...),
-):
-    reg = (registration or "").strip()
-    pwd = (password or "").strip()
+) -> Doctor:
+    if creds is None or not creds.credentials:
+        raise HTTPException(status_code=401, detail="Falta token (Authorization: Bearer)")
 
-    doctor = db.query(Doctor).filter(Doctor.registration == reg).first()
-    if not doctor or not doctor.password_hash:
-        return templates.TemplateResponse(
-            "login.html",
-            {"request": request, "error": "Credenciales inválidas."},
-            status_code=400,
-        )
+    token = creds.credentials
+    try:
+        payload = decode_token(token)
+        doctor_id = int(payload.get("sub"))
+    except Exception:
+        raise HTTPException(status_code=401, detail="Token inválido o expirado")
 
-    ok = pwd_context.verify(pwd, doctor.password_hash)
-    if not ok:
-        return templates.TemplateResponse(
-            "login.html",
-            {"request": request, "error": "Credenciales inválidas."},
-            status_code=400,
-        )
+    doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+    if not doctor:
+        raise HTTPException(status_code=401, detail="Doctor del token no existe")
 
-    # ✅ sesión
-    request.session["doctor_id"] = doctor.id
-    request.session["login_at"] = datetime.utcnow().isoformat()
-
-    return RedirectResponse(url="/app", status_code=302)
-
-
-@router.post("/logout")
-def logout(request: Request):
-    if hasattr(request, "session"):
-        request.session.clear()
-    return RedirectResponse(url="/login", status_code=302)
+    return doctor
