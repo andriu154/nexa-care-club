@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, Request, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload  # ✅ joinedload
 
 from ..database import get_db
 from ..models import Appointment, Patient, Encounter, Doctor, ClinicalNote, EncounterEvolution
@@ -51,15 +51,16 @@ def ui_dashboard(request: Request, db: Session = Depends(get_db), date: str | No
     start_date = base_date - timedelta(days=1)  # ayer
     end_date = base_date + timedelta(days=7)    # +7 días
 
-    # ✅ FIX: pre-calcular prev/next para el template (NO usar timedelta dentro de Jinja)
     prev_date = (base_date - timedelta(days=1)).isoformat()
     next_date = (base_date + timedelta(days=1)).isoformat()
 
     start_dt = datetime(start_date.year, start_date.month, start_date.day, 0, 0, 0)
     end_dt = datetime(end_date.year, end_date.month, end_date.day, 23, 59, 59)
 
+    # ✅ FIX CRÍTICO: eager-load de Patient para que Jinja no explote
     appts = (
         db.query(Appointment)
+        .options(joinedload(Appointment.patient))  # ✅ carga patient en la misma query
         .filter(Appointment.doctor_id == current_doctor.id)
         .filter(Appointment.start_at >= start_dt)
         .filter(Appointment.start_at <= end_dt)
