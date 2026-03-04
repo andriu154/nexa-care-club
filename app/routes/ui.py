@@ -57,10 +57,9 @@ def ui_dashboard(request: Request, db: Session = Depends(get_db), date: str | No
     start_dt = datetime(start_date.year, start_date.month, start_date.day, 0, 0, 0)
     end_dt = datetime(end_date.year, end_date.month, end_date.day, 23, 59, 59)
 
-    # ✅ FIX CRÍTICO: eager-load de Patient para que Jinja no explote
     appts = (
         db.query(Appointment)
-        .options(joinedload(Appointment.patient))  # ✅ carga patient en la misma query
+        .options(joinedload(Appointment.patient))
         .filter(Appointment.doctor_id == current_doctor.id)
         .filter(Appointment.start_at >= start_dt)
         .filter(Appointment.start_at <= end_dt)
@@ -69,9 +68,24 @@ def ui_dashboard(request: Request, db: Session = Depends(get_db), date: str | No
         .all()
     )
 
+    # ✅ DIAGNÓSTICO: detectar datos que rompen el template
+    bad = []
+    for a in appts:
+        if a.patient is None or a.start_at is None or a.end_at is None:
+            bad.append({
+                "id": a.id,
+                "patient_id": a.patient_id,
+                "start_at": str(a.start_at),
+                "end_at": str(a.end_at),
+                "status": a.status,
+            })
+
+    if bad:
+        print("🚨 BAD APPOINTMENTS FOUND:", bad)
+
     days = {}
     for a in appts:
-        k = a.start_at.date().isoformat()
+        k = a.start_at.date().isoformat() if a.start_at else "NO_DATE"
         days.setdefault(k, []).append(a)
 
     ordered_days = []
@@ -80,20 +94,21 @@ def ui_dashboard(request: Request, db: Session = Depends(get_db), date: str | No
         ordered_days.append(d.isoformat())
         d += timedelta(days=1)
 
-    return templates.TemplateResponse(
-        "dashboard.html",
-        {
-            "request": request,
-            "current_doctor": current_doctor,
-            "base_date": base_date,
-            "start_date": start_date,
-            "end_date": end_date,
-            "prev_date": prev_date,
-            "next_date": next_date,
-            "ordered_days": ordered_days,
-            "days": days,
-        },
-    )
+    ctx = {
+        "request": request,
+        "current_doctor": current_doctor,
+        "base_date": base_date,
+        "start_date": start_date,
+        "end_date": end_date,
+        "prev_date": prev_date,
+        "next_date": next_date,
+        "ordered_days": ordered_days,
+        "days": days,
+    }
+
+    # ✅ FORZAR RENDER: si Jinja revienta, el traceback sale en logs de Render
+    html = templates.get_template("dashboard.html").render(**ctx)
+    return HTMLResponse(html)
 
 
 # =========================
