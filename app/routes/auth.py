@@ -15,7 +15,11 @@ from ..models import Doctor
 router = APIRouter(tags=["Auth UI"])
 templates = Jinja2Templates(directory="app/templates")
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# ✅ Usar PBKDF2 (estable en Python 3.13, sin límite 72 bytes)
+pwd_context = CryptContext(
+    schemes=["pbkdf2_sha256", "bcrypt"],
+    deprecated="auto",
+)
 
 
 def get_logged_doctor(request: Request, db: Session) -> Doctor | None:
@@ -40,6 +44,13 @@ def login_submit(
     reg = (registration or "").strip()
     pwd = (password or "").strip()
 
+    if not reg or not pwd:
+        return templates.TemplateResponse(
+            "login.html",
+            {"request": request, "error": "Completa registro y contraseña."},
+            status_code=400,
+        )
+
     doctor = db.query(Doctor).filter(Doctor.registration == reg).first()
     if not doctor or not doctor.password_hash:
         return templates.TemplateResponse(
@@ -48,7 +59,12 @@ def login_submit(
             status_code=400,
         )
 
-    if not pwd_context.verify(pwd, doctor.password_hash):
+    try:
+        ok = pwd_context.verify(pwd, doctor.password_hash)
+    except Exception:
+        ok = False
+
+    if not ok:
         return templates.TemplateResponse(
             "login.html",
             {"request": request, "error": "Credenciales inválidas."},

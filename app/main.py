@@ -4,7 +4,6 @@ from starlette.middleware.sessions import SessionMiddleware
 import os
 
 from sqlalchemy import text
-
 from passlib.context import CryptContext
 
 from .database import engine, SessionLocal
@@ -34,7 +33,12 @@ app.add_middleware(
     https_only=True,  # Render usa HTTPS
 )
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# ✅ Usar PBKDF2 (estable en Python 3.13, sin límite 72 bytes)
+# bcrypt se deja como compatibilidad si ya existiera algún hash viejo.
+pwd_context = CryptContext(
+    schemes=["pbkdf2_sha256", "bcrypt"],
+    deprecated="auto",
+)
 
 
 def ensure_sqlite_schema():
@@ -82,14 +86,13 @@ def seed_default_doctors_if_enabled():
     if os.getenv("SEED_DEFAULT_DOCTORS", "0") != "1":
         return
 
-    # Lee credenciales desde ENV
-    reg1 = os.getenv("SEED_DOCTOR_1_REG", "").strip()
-    pass1 = os.getenv("SEED_DOCTOR_1_PASS", "").strip()
-    name1 = os.getenv("SEED_DOCTOR_1_NAME", "Doctor 1").strip()
+    reg1 = (os.getenv("SEED_DOCTOR_1_REG") or "").strip()
+    pass1 = (os.getenv("SEED_DOCTOR_1_PASS") or "").strip()
+    name1 = (os.getenv("SEED_DOCTOR_1_NAME") or "Doctor 1").strip()
 
-    reg2 = os.getenv("SEED_DOCTOR_2_REG", "").strip()
-    pass2 = os.getenv("SEED_DOCTOR_2_PASS", "").strip()
-    name2 = os.getenv("SEED_DOCTOR_2_NAME", "Doctor 2").strip()
+    reg2 = (os.getenv("SEED_DOCTOR_2_REG") or "").strip()
+    pass2 = (os.getenv("SEED_DOCTOR_2_PASS") or "").strip()
+    name2 = (os.getenv("SEED_DOCTOR_2_NAME") or "Doctor 2").strip()
 
     pairs = []
     if reg1 and pass1:
@@ -109,11 +112,14 @@ def seed_default_doctors_if_enabled():
                 print(f"ℹ️ Doctor ya existe (registration={reg}). No se modifica.")
                 continue
 
+            # ✅ Hash PBKDF2 (sin límite 72 bytes, no depende de bcrypt)
+            hashed = pwd_context.hash(plain_pass)
+
             d = Doctor(
                 name=name,
                 registration=reg,
                 specialty=None,
-                password_hash=pwd_context.hash(plain_pass),
+                password_hash=hashed,
             )
             db.add(d)
             db.commit()
