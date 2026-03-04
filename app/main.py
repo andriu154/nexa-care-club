@@ -30,11 +30,10 @@ app.add_middleware(
     SessionMiddleware,
     secret_key=os.getenv("SESSION_SECRET", "dev-secret-change-me"),
     same_site="lax",
-    https_only=True,  # Render usa HTTPS
+    https_only=True,
 )
 
-# ✅ Usar PBKDF2 (estable en Python 3.13, sin límite 72 bytes)
-# bcrypt se deja como compatibilidad si ya existiera algún hash viejo.
+# ✅ hash de contraseñas
 pwd_context = CryptContext(
     schemes=["pbkdf2_sha256", "bcrypt"],
     deprecated="auto",
@@ -48,7 +47,6 @@ def ensure_sqlite_schema():
     """
     try:
         with engine.begin() as conn:
-            # ¿Existe tabla doctors?
             tbl = conn.execute(
                 text("SELECT name FROM sqlite_master WHERE type='table' AND name='doctors';")
             ).fetchone()
@@ -60,7 +58,6 @@ def ensure_sqlite_schema():
             cols = conn.execute(text("PRAGMA table_info(doctors);")).fetchall()
             col_names = {c[1] for c in cols}
 
-            # Agregar columnas faltantes (nullable para no romper data vieja)
             if "specialty" not in col_names:
                 conn.execute(text("ALTER TABLE doctors ADD COLUMN specialty VARCHAR;"))
                 print("✅ Migración: doctors.specialty agregado")
@@ -73,15 +70,19 @@ def ensure_sqlite_schema():
                 conn.execute(text("ALTER TABLE doctors ADD COLUMN password_hash VARCHAR;"))
                 print("✅ Migración: doctors.password_hash agregado")
 
+            # ✅ NUEVO: columna pin (si no existe)
+            if "pin" not in col_names:
+                conn.execute(text("ALTER TABLE doctors ADD COLUMN pin VARCHAR NOT NULL DEFAULT '0000';"))
+                print("✅ Migración: doctors.pin agregado")
+
     except Exception as e:
         print("⚠️ Error en migración SQLite:", repr(e))
 
 
 def seed_default_doctors_if_enabled():
     """
-    Crea doctores por ENV (para poder loguearte en producción SIN Shell).
+    Crea doctores desde variables de entorno (Render).
     Solo corre si SEED_DEFAULT_DOCTORS=1.
-    No sobre-escribe passwords existentes; solo crea el doctor si no existe.
     """
     if os.getenv("SEED_DEFAULT_DOCTORS", "0") != "1":
         return
@@ -107,12 +108,12 @@ def seed_default_doctors_if_enabled():
     db = SessionLocal()
     try:
         for reg, plain_pass, name in pairs:
+
             existing = db.query(Doctor).filter(Doctor.registration == reg).first()
             if existing:
                 print(f"ℹ️ Doctor ya existe (registration={reg}). No se modifica.")
                 continue
 
-            # ✅ Hash PBKDF2 (sin límite 72 bytes, no depende de bcrypt)
             hashed = pwd_context.hash(plain_pass)
 
             d = Doctor(
@@ -120,27 +121,32 @@ def seed_default_doctors_if_enabled():
                 registration=reg,
                 specialty=None,
                 password_hash=hashed,
+                pin="0000",  # ✅ necesario para DB de Render
             )
+
             db.add(d)
             db.commit()
+
             print(f"✅ Doctor creado: {name} (registration={reg})")
+
     except Exception as e:
         db.rollback()
         print("⚠️ Error creando doctores seed:", repr(e))
+
     finally:
         db.close()
 
 
-# 1) crear tablas si no existen
+# 1️⃣ crear tablas
 Base.metadata.create_all(bind=engine)
 
-# 2) aplicar migraciones simples
+# 2️⃣ migraciones SQLite
 ensure_sqlite_schema()
 
-# 3) seed doctores (si está habilitado por ENV)
+# 3️⃣ seed doctores
 seed_default_doctors_if_enabled()
 
-# 4) rutas
+# 4️⃣ rutas
 app.include_router(auth_router)
 app.include_router(doctors_router)
 app.include_router(patients_router)
@@ -156,7 +162,7 @@ app.include_router(clinical_notes_router)
 app.include_router(pdf_router)
 app.include_router(history_router)
 
-# 5) archivos estáticos
+# 5️⃣ archivos estáticos
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 

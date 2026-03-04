@@ -19,6 +19,10 @@ class Doctor(Base):
 
     password_hash = Column(String, nullable=True)
 
+    # ✅ IMPORTANTE: tu DB en Render exige doctors.pin NOT NULL
+    # Lo agregamos para que SQLAlchemy pueda insertar sin error.
+    pin = Column(String, nullable=False, default="0000")
+
     encounters = relationship("Encounter", back_populates="doctor")
     appointments = relationship("Appointment", back_populates="doctor")
 
