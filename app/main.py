@@ -24,7 +24,7 @@ from .routes.appointments_ui import router as appointments_ui_router
 
 app = FastAPI(title="NexaCenter")
 
-# 🔐 Middleware de sesión (LOGIN UI) — SOLO UNA VEZ
+# 🔐 Middleware de sesión (LOGIN UI)
 app.add_middleware(
     SessionMiddleware,
     secret_key=os.getenv("SESSION_SECRET", "dev-secret-change-me"),
@@ -33,33 +33,47 @@ app.add_middleware(
 )
 
 
-# =========================
-# ✅ MIGRACIÓN SIMPLE SQLITE
-# =========================
 def ensure_sqlite_schema():
     """
     SQLite no se migra solo con create_all().
-    Esto asegura que columnas nuevas existan en tablas viejas.
+    Esto agrega columnas faltantes en tablas ya existentes.
     """
     try:
         with engine.begin() as conn:
-            # Ver columnas actuales de doctors
-            cols = conn.execute(text("PRAGMA table_info(doctors);")).fetchall()
-            col_names = {c[1] for c in cols}  # c[1] = name
+            # ¿Existe tabla doctors?
+            tbl = conn.execute(
+                text("SELECT name FROM sqlite_master WHERE type='table' AND name='doctors';")
+            ).fetchone()
 
-            # Si falta specialty, la agregamos
+            if not tbl:
+                # Si no existe, create_all la creará abajo.
+                print("ℹ️ Tabla doctors no existe todavía.")
+                return
+
+            cols = conn.execute(text("PRAGMA table_info(doctors);")).fetchall()
+            col_names = {c[1] for c in cols}  # c[1] = column name
+
+            # Agregar columnas faltantes (todas nullable para no romper datos viejos)
             if "specialty" not in col_names:
                 conn.execute(text("ALTER TABLE doctors ADD COLUMN specialty VARCHAR;"))
-                print("✅ Migración aplicada: doctors.specialty agregado")
+                print("✅ Migración: doctors.specialty agregado")
+
+            if "registration" not in col_names:
+                conn.execute(text("ALTER TABLE doctors ADD COLUMN registration VARCHAR;"))
+                print("✅ Migración: doctors.registration agregado")
+
+            if "password_hash" not in col_names:
+                conn.execute(text("ALTER TABLE doctors ADD COLUMN password_hash VARCHAR;"))
+                print("✅ Migración: doctors.password_hash agregado")
 
     except Exception as e:
-        print("⚠️ Error en migración SQLite:", e)
+        print("⚠️ Error en migración SQLite:", repr(e))
 
 
-# 1) crear tablas (si no existen)
+# 1) crear tablas si no existen
 Base.metadata.create_all(bind=engine)
 
-# 1.1) aplicar migraciones simples
+# 1.1) aplicar migración simple (si tablas viejas existen)
 ensure_sqlite_schema()
 
 # 2) rutas
