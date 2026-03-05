@@ -5,7 +5,8 @@
 {% endblock %}
 
 {% block actions %}
-  <a class="btn btn-ghost" href="/app/appointments/new?date={{ base_date }}">+ Nueva cita</a>
+  <!-- ✅ Abre modal -->
+  <a class="btn btn-ghost" data-nc-modal-open href="/app/appointments/new?date={{ base_date }}&modal=1">+ Nueva cita</a>
 {% endblock %}
 
 {% block content %}
@@ -48,6 +49,15 @@
       font-size:12px;
       font-weight:700;
     }
+
+    .btn-disabled {
+      background:#e5e7eb;
+      color:#6b7280;
+      border:1px solid rgba(0,0,0,0.08);
+      cursor:not-allowed;
+      box-shadow:none !important;
+      transform:none !important;
+    }
   </style>
 
   <div class="card">
@@ -76,7 +86,9 @@
     <div class="card" style="margin-top:14px;">
       <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
         <h3 style="margin:0;">{{ day }}</h3>
-        <a class="btn btn-ghost" href="/app/appointments/new?date={{ day }}">Agendar</a>
+
+        <!-- ✅ Abre modal -->
+        <a class="btn btn-ghost" data-nc-modal-open href="/app/appointments/new?date={{ day }}&modal=1">Agendar</a>
       </div>
 
       {% if day not in days or (days[day] | length) == 0 %}
@@ -98,7 +110,6 @@
                 </div>
               </div>
 
-              <!-- ✅ Badge de estado -->
               <div style="min-width:170px; text-align:right;">
                 {% if a.ui_badge == "a_tiempo" %}
                   <span class="badge badge-green">A tiempo</span>
@@ -117,26 +128,26 @@
 
               <div style="display:flex; gap:8px; align-items:center; justify-content:flex-end; flex-wrap:wrap;">
 
-                <!-- ✅ Botón: Abrir atención (cuando está a tiempo o atrasado) -->
-                {% if a.ui_badge == "a_tiempo" or a.ui_badge == "atrasado" %}
+                {% if a.ui_badge == "en_atencion" and a.encounter_id %}
+                  <a class="btn btn-ghost btn-sm" href="/app/encounters/{{ a.encounter_id }}">Abrir historia</a>
+                {% else %}
                   <form method="post" action="/app/appointments/{{ a.id }}/start" style="display:inline;">
-                    <button class="btn btn-sm btn-green" type="submit">Abrir atención</button>
+                    {% if a.ui_badge == "a_tiempo" or a.ui_badge == "atrasado" %}
+                      <button class="btn btn-sm btn-green" type="submit">INICIAR ATENCIÓN</button>
+                    {% else %}
+                      <button class="btn btn-sm btn-disabled" type="button" disabled title="Disponible cuando sea la hora de la cita">
+                        INICIAR ATENCIÓN
+                      </button>
+                    {% endif %}
                   </form>
                 {% endif %}
 
-                <!-- ✅ Si ya tiene atención, abrir historia -->
-                {% if a.ui_badge == "en_atencion" and a.encounter_id %}
-                  <a class="btn btn-ghost btn-sm" href="/app/encounters/{{ a.encounter_id }}">Abrir historia</a>
-                {% endif %}
-
-                <!-- 🔴 Botón: Cancelar cita manual -->
                 {% if a.ui_badge != "cancelado" and a.ui_badge != "cancelado_auto" and a.ui_badge != "completado" and a.ui_badge != "en_atencion" %}
                   <form method="post" action="/app/appointments/{{ a.id }}/cancel?date={{ day }}" style="display:inline;">
                     <button class="btn btn-sm btn-red" type="submit">Cancelar cita</button>
                   </form>
                 {% endif %}
 
-                <!-- Mantener tu Reagendar -->
                 {% if a.ui_badge != "cancelado" and a.ui_badge != "cancelado_auto" and a.ui_badge != "completado" %}
                   <details>
                     <summary class="btn btn-ghost btn-sm" style="cursor:pointer;">Reagendar</summary>

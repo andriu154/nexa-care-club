@@ -86,6 +86,14 @@ def _can_start_now(appt: Appointment) -> bool:
     return start_window <= now_local_naive <= end_window
 
 
+def _is_modal_request(request: Request, modal_param: str | int | None) -> bool:
+    # modal=1 o header X-Requested-With=fetch (cuando viene del JS del modal)
+    if str(modal_param or "").strip() == "1":
+        return True
+    hdr = (request.headers.get("X-Requested-With") or "").lower()
+    return hdr == "fetch"
+
+
 # =========================
 # FORM: NUEVA CITA
 # =========================
@@ -95,6 +103,7 @@ def new_appointment_form(
     db: Session = Depends(get_db),
     date: str | None = None,
     cedula: str | None = None,
+    modal: str | None = None,
 ):
     current_doctor = _require_login(request, db)
     if not current_doctor:
@@ -105,21 +114,23 @@ def new_appointment_form(
     ced = _clean_cedula(cedula or "")
     patient = _find_patient_by_cedula(db, ced) if ced else None
 
-    return templates.TemplateResponse(
-        "appointment_new.html",
-        {
-            "request": request,
-            "current_doctor": current_doctor,
-            "date": d,
-            "cedula": ced,
-            "patient_found": patient,
-            "error": None,
-            "time": "",
-            "duration_min": 60,
-            "reason": "",
-            "notes": "",
-        },
-    )
+    ctx = {
+        "request": request,
+        "current_doctor": current_doctor,
+        "date": d,
+        "cedula": ced,
+        "patient_found": patient,
+        "error": None,
+        "time": "",
+        "duration_min": 60,
+        "reason": "",
+        "notes": "",
+    }
+
+    if _is_modal_request(request, modal):
+        return templates.TemplateResponse("appointment_new_modal.html", ctx)
+
+    return templates.TemplateResponse("appointment_new.html", ctx)
 
 
 # =========================
@@ -133,6 +144,7 @@ def quick_create_patient(
     cedula: str = Form(...),
     full_name: str = Form(...),
     phone: str = Form(""),
+    modal: str = Form("0"),
 ):
     current_doctor = _require_login(request, db)
     if not current_doctor:
@@ -150,8 +162,9 @@ def quick_create_patient(
 
     existing = _find_patient_by_cedula(db, ced)
     if existing:
+        suffix = "&modal=1" if str(modal) == "1" else ""
         return RedirectResponse(
-            url=f"/app/appointments/new?date={d.isoformat()}&cedula={ced}",
+            url=f"/app/appointments/new?date={d.isoformat()}&cedula={ced}{suffix}",
             status_code=HTTP_303_SEE_OTHER,
         )
 
@@ -171,8 +184,9 @@ def quick_create_patient(
     db.add(p)
     db.commit()
 
+    suffix = "&modal=1" if str(modal) == "1" else ""
     return RedirectResponse(
-        url=f"/app/appointments/new?date={d.isoformat()}&cedula={ced}",
+        url=f"/app/appointments/new?date={d.isoformat()}&cedula={ced}{suffix}",
         status_code=HTTP_303_SEE_OTHER,
     )
 
@@ -190,6 +204,7 @@ def create_appointment(
     duration_min: int = Form(60),
     reason: str = Form(""),
     notes: str = Form(""),
+    modal: str = Form("0"),
 ):
     current_doctor = _require_login(request, db)
     if not current_doctor:

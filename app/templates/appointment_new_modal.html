@@ -1,0 +1,102 @@
+<div style="max-width: 920px; margin: 0 auto;">
+  <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+    <div>
+      <div class="h2">Nueva cita</div>
+      <div class="muted" style="margin-top:6px;">Doctor: <b>{{ current_doctor.name }}</b></div>
+    </div>
+    <div class="pill">Fecha: {{ date }}</div>
+  </div>
+
+  <hr class="nc-divider"/>
+
+  <!-- Buscar por cédula -->
+  <form method="get" action="/app/appointments/new" class="nc-form">
+    <input type="hidden" name="date" value="{{ date }}" />
+    <input type="hidden" name="modal" value="1" />
+
+    <div class="nc-form-row">
+      <div style="min-width: 240px; flex: 1;">
+        <div class="nc-label">Cédula</div>
+        <input class="input" name="cedula" type="text" value="{{ cedula or '' }}" placeholder="Ej: 0102030405" />
+        <div class="nc-help">Escribe la cédula y presiona Buscar.</div>
+      </div>
+
+      <button class="btn btn-primary" type="submit">Buscar</button>
+      <button class="btn btn-ghost" type="button" data-nc-modal-close>Salir</button>
+    </div>
+  </form>
+
+  <hr class="nc-divider"/>
+
+  {% if patient_found %}
+    <div class="nc-note">
+      <b>Paciente:</b> {{ patient_found.full_name }}<br/>
+      <small style="opacity:.8;">Cédula: {{ patient_found.cedula }}</small>
+    </div>
+
+    <form method="post" action="/app/appointments/new" class="nc-form" style="margin-top: 12px;">
+      <input type="hidden" name="date" value="{{ date }}" />
+      <input type="hidden" name="patient_id" value="{{ patient_found.id }}" />
+      <input type="hidden" name="modal" value="1" />
+
+      <div>
+        <div class="nc-label">Hora</div>
+        <input class="input" name="time" type="time" value="{{ time or '' }}" required />
+      </div>
+
+      <div>
+        <div class="nc-label">Duración (min)</div>
+        <input class="input" name="duration_min" type="number" min="10" max="240" value="{{ duration_min or 60 }}" required />
+      </div>
+
+      <div>
+        <div class="nc-label">Motivo</div>
+        <input class="input" name="reason" type="text" maxlength="120" value="{{ reason or '' }}" placeholder="Opcional" />
+      </div>
+
+      <div>
+        <div class="nc-label">Notas</div>
+        <textarea class="textarea" name="notes" rows="4" placeholder="Opcional">{{ notes or "" }}</textarea>
+      </div>
+
+      <div class="nc-actions">
+        <button class="btn btn-primary" type="submit">Guardar cita</button>
+        <button class="btn btn-ghost" type="button" data-nc-modal-close>Cancelar</button>
+      </div>
+    </form>
+
+  {% else %}
+    <div class="muted" style="margin-top: 6px;">
+      {% if cedula %}
+        No existe paciente con esa cédula. Regístralo aquí:
+      {% else %}
+        Escribe una cédula y presiona Buscar. Si no existe, podrás registrarlo aquí.
+      {% endif %}
+    </div>
+
+    <form method="post" action="/app/patients/quick-create" class="nc-form" style="margin-top: 12px;">
+      <input type="hidden" name="date" value="{{ date }}" />
+      <input type="hidden" name="modal" value="1" />
+
+      <div>
+        <div class="nc-label">Cédula</div>
+        <input class="input" name="cedula" type="text" value="{{ cedula or '' }}" required />
+      </div>
+
+      <div>
+        <div class="nc-label">Nombres completos</div>
+        <input class="input" name="full_name" type="text" required />
+      </div>
+
+      <div>
+        <div class="nc-label">Teléfono (opcional)</div>
+        <input class="input" name="phone" type="text" />
+      </div>
+
+      <div class="nc-actions">
+        <button class="btn btn-primary" type="submit">Registrar paciente</button>
+        <button class="btn btn-ghost" type="button" data-nc-modal-close>Cancelar</button>
+      </div>
+    </form>
+  {% endif %}
+</div>

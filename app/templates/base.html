@@ -58,5 +58,20 @@
       </section>
     </main>
   </div>
+
+  <!-- ✅ MODAL GLOBAL (se usa para "+ Nueva cita") -->
+  <div id="nc-modal" class="nc-modal" aria-hidden="true">
+    <div class="nc-modal-card" role="dialog" aria-modal="true" aria-labelledby="nc-modal-title">
+      <div class="nc-modal-header">
+        <div class="nc-modal-title" id="nc-modal-title">Nueva cita</div>
+        <button type="button" class="nc-icon-btn" data-nc-modal-close aria-label="Cerrar">✕</button>
+      </div>
+      <div id="nc-modal-body" class="nc-modal-body">
+        <!-- aquí se inyecta HTML -->
+      </div>
+    </div>
+  </div>
+
+  <script defer src="/static/app.js"></script>
 </body>
 </html>

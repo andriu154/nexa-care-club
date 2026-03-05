@@ -379,3 +379,112 @@ a{ color: inherit; }
   background: #F2F2F2;
   color: #777;
 }
+
+/* =========================
+   ✅ MODAL NexaCenter
+   ========================= */
+
+.nc-modal-lock { overflow:hidden; }
+
+.nc-modal{
+  position: fixed;
+  inset: 0;
+  display: none;
+  place-items: center;
+  padding: 18px;
+  background: rgba(17, 24, 39, 0.55);
+  z-index: 9999;
+}
+
+.nc-modal.open{ display:grid; }
+
+.nc-modal-card{
+  width: min(820px, 95vw);
+  max-height: 88vh;
+  overflow: auto;
+  background: #fff;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,0.2);
+  box-shadow: 0 18px 60px rgba(0,0,0,0.28);
+}
+
+.nc-modal-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--nc-border);
+}
+
+.nc-modal-title{
+  font-weight: 900;
+  letter-spacing: 0.2px;
+}
+
+.nc-icon-btn{
+  border:none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 6px 10px;
+  border-radius: 12px;
+}
+.nc-icon-btn:hover{
+  background: #f3f4f6;
+}
+
+.nc-modal-body{
+  padding: 16px;
+}
+
+.nc-spinner{
+  padding: 18px;
+  color: var(--nc-muted);
+  font-weight: 700;
+}
+
+/* Forms inside modal */
+.nc-form{
+  display: grid;
+  gap: 12px;
+}
+
+.nc-form-row{
+  display:flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: end;
+}
+
+.nc-label{
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.nc-help{
+  font-size: 12px;
+  color: var(--nc-muted);
+  margin-top: 4px;
+}
+
+.nc-divider{
+  border: none;
+  border-top: 1px solid var(--nc-border);
+  margin: 14px 0;
+}
+
+.nc-note{
+  padding: 12px;
+  border: 1px solid #cfe2ff;
+  background: #e7f1ff;
+  border-radius: 14px;
+}
+
+.nc-actions{
+  display:flex;
+  gap: 10px;
+  align-items:center;
+  justify-content:flex-end;
+  flex-wrap: wrap;
+}
