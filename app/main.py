@@ -25,7 +25,6 @@ from .routes.appointments_ui import router as appointments_ui_router
 
 app = FastAPI(title="NexaCenter")
 
-# 🔐 Middleware de sesión (LOGIN UI)
 IS_PROD = os.getenv("RENDER") is not None or (os.getenv("ENV", "").lower() in ("prod", "production", "1", "true"))
 
 app.add_middleware(
@@ -35,83 +34,97 @@ app.add_middleware(
     https_only=IS_PROD,
 )
 
-# ✅ hash de contraseñas
 pwd_context = CryptContext(
     schemes=["pbkdf2_sha256", "bcrypt"],
     deprecated="auto",
 )
 
 
-def ensure_sqlite_schema():
+def ensure_schema():
     """
-    SQLite no se migra solo con create_all().
-    Esto agrega columnas faltantes en tablas ya existentes.
+    Agrega columnas faltantes en SQLite o Postgres.
+    Esto evita 500 cuando actualizamos modelos sin migraciones formales.
     """
     try:
+        dialect = engine.dialect.name  # 'sqlite', 'postgresql', etc.
+        print(f"ℹ️ DB dialect detectado: {dialect}")
+
         with engine.begin() as conn:
-            # -------------------------
+            # =========================
+            # SQLITE
+            # =========================
+            if dialect == "sqlite":
+                # ---- doctors
+                tbl = conn.execute(
+                    text("SELECT name FROM sqlite_master WHERE type='table' AND name='doctors';")
+                ).fetchone()
+
+                if tbl:
+                    cols = conn.execute(text("PRAGMA table_info(doctors);")).fetchall()
+                    col_names = {c[1] for c in cols}
+
+                    if "specialty" not in col_names:
+                        conn.execute(text("ALTER TABLE doctors ADD COLUMN specialty VARCHAR;"))
+                        print("✅ Migración: doctors.specialty agregado")
+
+                    if "registration" not in col_names:
+                        conn.execute(text("ALTER TABLE doctors ADD COLUMN registration VARCHAR;"))
+                        print("✅ Migración: doctors.registration agregado")
+
+                    if "password_hash" not in col_names:
+                        conn.execute(text("ALTER TABLE doctors ADD COLUMN password_hash VARCHAR;"))
+                        print("✅ Migración: doctors.password_hash agregado")
+
+                    if "pin" not in col_names:
+                        conn.execute(text("ALTER TABLE doctors ADD COLUMN pin VARCHAR NOT NULL DEFAULT '0000';"))
+                        print("✅ Migración: doctors.pin agregado")
+
+                # ---- patients
+                tbl_pat = conn.execute(
+                    text("SELECT name FROM sqlite_master WHERE type='table' AND name='patients';")
+                ).fetchone()
+
+                if tbl_pat:
+                    cols_p = conn.execute(text("PRAGMA table_info(patients);")).fetchall()
+                    p_col_names = {c[1] for c in cols_p}
+
+                    if "cedula" not in p_col_names:
+                        conn.execute(text("ALTER TABLE patients ADD COLUMN cedula VARCHAR;"))
+                        print("✅ Migración: patients.cedula agregado")
+
+                    if "phone" not in p_col_names:
+                        conn.execute(text("ALTER TABLE patients ADD COLUMN phone VARCHAR;"))
+                        print("✅ Migración: patients.phone agregado")
+
+                    # índices
+                    conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ux_patients_cedula ON patients(cedula);"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_patients_cedula ON patients(cedula);"))
+
+                return
+
+            # =========================
+            # POSTGRES / OTROS (usamos IF NOT EXISTS)
+            # =========================
             # doctors
-            # -------------------------
-            tbl = conn.execute(
-                text("SELECT name FROM sqlite_master WHERE type='table' AND name='doctors';")
-            ).fetchone()
+            conn.execute(text("ALTER TABLE doctors ADD COLUMN IF NOT EXISTS specialty VARCHAR;"))
+            conn.execute(text("ALTER TABLE doctors ADD COLUMN IF NOT EXISTS registration VARCHAR;"))
+            conn.execute(text("ALTER TABLE doctors ADD COLUMN IF NOT EXISTS password_hash VARCHAR;"))
+            conn.execute(text("ALTER TABLE doctors ADD COLUMN IF NOT EXISTS pin VARCHAR NOT NULL DEFAULT '0000';"))
 
-            if tbl:
-                cols = conn.execute(text("PRAGMA table_info(doctors);")).fetchall()
-                col_names = {c[1] for c in cols}
+            # patients
+            conn.execute(text("ALTER TABLE patients ADD COLUMN IF NOT EXISTS cedula VARCHAR;"))
+            conn.execute(text("ALTER TABLE patients ADD COLUMN IF NOT EXISTS phone VARCHAR;"))
 
-                if "specialty" not in col_names:
-                    conn.execute(text("ALTER TABLE doctors ADD COLUMN specialty VARCHAR;"))
-                    print("✅ Migración: doctors.specialty agregado")
+            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ux_patients_cedula ON patients(cedula);"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_patients_cedula ON patients(cedula);"))
 
-                if "registration" not in col_names:
-                    conn.execute(text("ALTER TABLE doctors ADD COLUMN registration VARCHAR;"))
-                    print("✅ Migración: doctors.registration agregado")
-
-                if "password_hash" not in col_names:
-                    conn.execute(text("ALTER TABLE doctors ADD COLUMN password_hash VARCHAR;"))
-                    print("✅ Migración: doctors.password_hash agregado")
-
-                if "pin" not in col_names:
-                    conn.execute(text("ALTER TABLE doctors ADD COLUMN pin VARCHAR NOT NULL DEFAULT '0000';"))
-                    print("✅ Migración: doctors.pin agregado")
-            else:
-                print("ℹ️ Tabla doctors no existe todavía.")
-
-            # -------------------------
-            # patients (✅ cedula + phone)
-            # -------------------------
-            tbl_pat = conn.execute(
-                text("SELECT name FROM sqlite_master WHERE type='table' AND name='patients';")
-            ).fetchone()
-
-            if tbl_pat:
-                cols_p = conn.execute(text("PRAGMA table_info(patients);")).fetchall()
-                p_col_names = {c[1] for c in cols_p}
-
-                if "cedula" not in p_col_names:
-                    conn.execute(text("ALTER TABLE patients ADD COLUMN cedula VARCHAR;"))
-                    print("✅ Migración: patients.cedula agregado")
-
-                if "phone" not in p_col_names:
-                    conn.execute(text("ALTER TABLE patients ADD COLUMN phone VARCHAR;"))
-                    print("✅ Migración: patients.phone agregado")
-
-                # índices (SQLite)
-                conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ux_patients_cedula ON patients(cedula);"))
-                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_patients_cedula ON patients(cedula);"))
-            else:
-                print("ℹ️ Tabla patients no existe todavía.")
+            print("✅ Migración: esquema actualizado (modo Postgres/otros)")
 
     except Exception as e:
-        print("⚠️ Error en migración SQLite:", repr(e))
+        print("⚠️ Error en migración de esquema:", repr(e))
 
 
 def seed_default_doctors_if_enabled():
-    """
-    Crea doctores desde variables de entorno (Render).
-    Solo corre si SEED_DEFAULT_DOCTORS=1.
-    """
     if os.getenv("SEED_DEFAULT_DOCTORS", "0") != "1":
         return
 
@@ -142,7 +155,6 @@ def seed_default_doctors_if_enabled():
                 continue
 
             hashed = pwd_context.hash(plain_pass)
-
             d = Doctor(
                 name=name,
                 registration=reg,
@@ -164,8 +176,8 @@ def seed_default_doctors_if_enabled():
 # 1️⃣ crear tablas
 Base.metadata.create_all(bind=engine)
 
-# 2️⃣ migraciones SQLite
-ensure_sqlite_schema()
+# 2️⃣ migraciones
+ensure_schema()
 
 # 3️⃣ seed doctores
 seed_default_doctors_if_enabled()
@@ -186,7 +198,7 @@ app.include_router(clinical_notes_router)
 app.include_router(pdf_router)
 app.include_router(history_router)
 
-# 5️⃣ archivos estáticos
+# 5️⃣ estáticos
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 

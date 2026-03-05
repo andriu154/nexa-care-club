@@ -34,12 +34,8 @@ class Patient(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
-    # ✅ NUEVO: Cédula (búsqueda/autollenado)
     cedula = Column(String, unique=True, index=True, nullable=True)
-
     full_name = Column(String, nullable=False)
-
-    # ✅ NUEVO: teléfono opcional
     phone = Column(String, nullable=True)
 
     qr_code = Column(String, unique=True, index=True, nullable=True)
@@ -48,6 +44,10 @@ class Patient(Base):
     completed_sessions = Column(Integer, default=0, nullable=False)
 
     status = Column(String, default="Activo", nullable=False)
+
+    # ✅ FIX: tu BD exige created_at NOT NULL
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, nullable=True)
 
     encounters = relationship("Encounter", back_populates="patient")
     attendances = relationship("Attendance", back_populates="patient")

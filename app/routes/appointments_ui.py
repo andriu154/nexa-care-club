@@ -142,6 +142,8 @@ def quick_create_patient(
         total_sessions=0,
         completed_sessions=0,
         status="Activo",
+        created_at=datetime.utcnow(),  # ✅ FIX NOT NULL patients.created_at
+        updated_at=datetime.utcnow(),
     )
     db.add(p)
     db.commit()
@@ -208,7 +210,9 @@ def create_appointment(
     return RedirectResponse(url=f"/app?date={d.isoformat()}", status_code=HTTP_303_SEE_OTHER)
 
 
-# (Dejo tus endpoints avanzados tal como los tenías, sin cambios)
+# =========================
+# ✅ INICIAR ATENCIÓN DESDE CITA
+# =========================
 @router.post("/app/appointments/{appointment_id}/start")
 def start_encounter_from_appointment(
     appointment_id: int,
