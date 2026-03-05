@@ -1,4 +1,7 @@
 from datetime import datetime, timedelta
+import os
+from zoneinfo import ZoneInfo
+
 from fastapi import APIRouter, Depends, Request, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -11,6 +14,9 @@ from .auth import get_logged_doctor
 # ✅ IMPORTANTE: todo el UI vive bajo /app
 router = APIRouter(prefix="/app", tags=["UI"])
 templates = Jinja2Templates(directory="app/templates")
+
+# ✅ Usar la misma TZ que appointments_ui.py (por env)
+APP_TZ = ZoneInfo(os.getenv("APP_TIMEZONE", "America/Guayaquil"))
 
 
 def _redirect_login():
@@ -33,6 +39,56 @@ def _parse_date(s: str | None):
         return None
 
 
+def _now_local_naive() -> datetime:
+    # usamos hora local, pero naive, igual que start_at/end_at en DB
+    return datetime.now(APP_TZ).replace(tzinfo=None)
+
+
+def _can_start_now(appt: Appointment) -> bool:
+    # Ventana: 15 min antes hasta 30 min después
+    now = _now_local_naive()
+    start_window = appt.start_at - timedelta(minutes=15)
+    end_window = appt.end_at + timedelta(minutes=30)
+    return start_window <= now <= end_window
+
+
+def _compute_ui_badge(appt: Appointment) -> str:
+    """
+    Devuelve uno de estos:
+    - cancelado
+    - cancelado_auto (no_show)
+    - completado
+    - en_atencion
+    - a_tiempo
+    - atrasado
+    - pendiente
+    """
+    # Estados directos
+    if appt.status == "canceled":
+        return "cancelado"
+    if appt.status == "no_show":
+        return "cancelado_auto"
+    if appt.status == "completed":
+        return "completado"
+
+    # Si ya hay encounter => en atención
+    if appt.encounter_id:
+        return "en_atencion"
+
+    now = _now_local_naive()
+
+    # Antes de la ventana => pendiente
+    if now < (appt.start_at - timedelta(minutes=15)):
+        return "pendiente"
+
+    # Dentro de ventana (hasta end_at) => a tiempo
+    if now <= appt.end_at:
+        return "a_tiempo"
+
+    # Después de end_at => atrasado (aunque aún se puede iniciar hasta +30)
+    return "atrasado"
+
+
 def _is_editable(enc: Encounter) -> bool:
     if enc.ended_at is None:
         return True
@@ -42,8 +98,6 @@ def _is_editable(enc: Encounter) -> bool:
 # =========================
 # DASHBOARD
 # =========================
-
-# ✅ Soporta /app y /app/
 @router.get("", response_class=HTMLResponse)
 @router.get("/", response_class=HTMLResponse)
 def ui_dashboard(request: Request, db: Session = Depends(get_db), date: str | None = None):
@@ -51,13 +105,15 @@ def ui_dashboard(request: Request, db: Session = Depends(get_db), date: str | No
     if not current_doctor:
         return _redirect_login()
 
-    base_date = _parse_date(date) or datetime.utcnow().date()
+    # ✅ base_date en hora local (no UTC)
+    base_date = _parse_date(date) or datetime.now(APP_TZ).date()
     start_date = base_date - timedelta(days=1)
     end_date = base_date + timedelta(days=7)
 
     prev_date = (base_date - timedelta(days=1)).isoformat()
     next_date = (base_date + timedelta(days=1)).isoformat()
 
+    # start_dt/end_dt naive (hora local)
     start_dt = datetime(start_date.year, start_date.month, start_date.day, 0, 0, 0)
     end_dt = datetime(end_date.year, end_date.month, end_date.day, 23, 59, 59)
 
@@ -70,6 +126,11 @@ def ui_dashboard(request: Request, db: Session = Depends(get_db), date: str | No
         .order_by(Appointment.start_at.asc())
         .all()
     )
+
+    # ✅ Enriquecer cada cita con ui_badge y can_start_now
+    for a in appts:
+        a.can_start_now = _can_start_now(a)
+        a.ui_badge = _compute_ui_badge(a)
 
     days = {}
     for a in appts:
