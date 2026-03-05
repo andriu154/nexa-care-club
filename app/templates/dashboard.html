@@ -9,6 +9,47 @@
 {% endblock %}
 
 {% block content %}
+
+  <style>
+    .badge {
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:4px 10px;
+      border-radius:999px;
+      font-size:12px;
+      font-weight:700;
+      border:1px solid rgba(0,0,0,0.15);
+      line-height:1;
+      white-space:nowrap;
+    }
+    .badge-green { background:#d1fae5; color:#065f46; border-color:#34d399; }
+    .badge-orange { background:#ffedd5; color:#9a3412; border-color:#fb923c; }
+    .badge-red { background:#fee2e2; color:#991b1b; border-color:#f87171; }
+    .badge-gray { background:#f3f4f6; color:#374151; border-color:#d1d5db; }
+
+    .btn-green {
+      background:#16a34a;
+      color:white;
+      border:1px solid rgba(0,0,0,0.12);
+    }
+    .btn-green:hover { filter:brightness(0.95); }
+
+    .btn-red {
+      background:#dc2626;
+      color:white;
+      border:1px solid rgba(0,0,0,0.12);
+    }
+    .btn-red:hover { filter:brightness(0.95); }
+
+    .btn-sm {
+      padding:6px 10px;
+      border-radius:10px;
+      font-size:12px;
+      font-weight:700;
+    }
+  </style>
+
   <div class="card">
     <div style="display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap;">
       <div>
@@ -44,6 +85,7 @@
         <div class="list" style="margin-top:10px;">
           {% for a in days[day] %}
             <div style="display:flex; gap:12px; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid rgba(255,255,255,0.06);">
+
               <div style="min-width:120px;">
                 <strong>{{ a.start_at.strftime("%H:%M") }}</strong>
                 <span class="muted">– {{ a.end_at.strftime("%H:%M") }}</span>
@@ -56,26 +98,59 @@
                 </div>
               </div>
 
-              <div class="muted" style="min-width:110px; text-align:right;">
-                {{ a.status }}
+              <!-- ✅ Badge de estado -->
+              <div style="min-width:170px; text-align:right;">
+                {% if a.ui_badge == "a_tiempo" %}
+                  <span class="badge badge-green">A tiempo</span>
+                {% elif a.ui_badge == "atrasado" %}
+                  <span class="badge badge-orange">Atrasado</span>
+                {% elif a.ui_badge == "en_atencion" %}
+                  <span class="badge badge-green">En atención</span>
+                {% elif a.ui_badge == "completado" %}
+                  <span class="badge badge-gray">Completado</span>
+                {% elif a.ui_badge == "cancelado" or a.ui_badge == "cancelado_auto" %}
+                  <span class="badge badge-red">Cancelado</span>
+                {% else %}
+                  <span class="badge badge-gray">Pendiente</span>
+                {% endif %}
               </div>
 
-              <div style="display:flex; gap:8px; align-items:center;">
-                <form method="post" action="/app/appointments/{{ a.id }}/cancel?date={{ base_date }}" style="display:inline;">
-                  <button class="btn btn-ghost" type="submit">Cancelar</button>
-                </form>
+              <div style="display:flex; gap:8px; align-items:center; justify-content:flex-end; flex-wrap:wrap;">
 
-                <details>
-                  <summary class="btn btn-ghost" style="cursor:pointer;">Reagendar</summary>
-                  <form method="post" action="/app/appointments/{{ a.id }}/reschedule" style="margin-top:10px;">
-                    <input class="input" type="hidden" name="date" value="{{ day }}">
-                    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                      <input class="input" type="time" name="time" value="{{ a.start_at.strftime('%H:%M') }}" required>
-                      <input class="input" type="number" name="duration_min" value="{{ ((a.end_at - a.start_at).seconds // 60) }}" min="10" max="240" required>
-                      <button class="btn btn-primary" type="submit">Guardar</button>
-                    </div>
+                <!-- ✅ Botón: Abrir atención (cuando está a tiempo o atrasado) -->
+                {% if a.ui_badge == "a_tiempo" or a.ui_badge == "atrasado" %}
+                  <form method="post" action="/app/appointments/{{ a.id }}/start" style="display:inline;">
+                    <button class="btn btn-sm btn-green" type="submit">Abrir atención</button>
                   </form>
-                </details>
+                {% endif %}
+
+                <!-- ✅ Si ya tiene atención, abrir historia -->
+                {% if a.ui_badge == "en_atencion" and a.encounter_id %}
+                  <a class="btn btn-ghost btn-sm" href="/app/encounters/{{ a.encounter_id }}">Abrir historia</a>
+                {% endif %}
+
+                <!-- 🔴 Botón: Cancelar cita manual -->
+                {% if a.ui_badge != "cancelado" and a.ui_badge != "cancelado_auto" and a.ui_badge != "completado" and a.ui_badge != "en_atencion" %}
+                  <form method="post" action="/app/appointments/{{ a.id }}/cancel?date={{ day }}" style="display:inline;">
+                    <button class="btn btn-sm btn-red" type="submit">Cancelar cita</button>
+                  </form>
+                {% endif %}
+
+                <!-- Mantener tu Reagendar -->
+                {% if a.ui_badge != "cancelado" and a.ui_badge != "cancelado_auto" and a.ui_badge != "completado" %}
+                  <details>
+                    <summary class="btn btn-ghost btn-sm" style="cursor:pointer;">Reagendar</summary>
+                    <form method="post" action="/app/appointments/{{ a.id }}/reschedule" style="margin-top:10px;">
+                      <input class="input" type="hidden" name="date" value="{{ day }}">
+                      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                        <input class="input" type="time" name="time" value="{{ a.start_at.strftime('%H:%M') }}" required>
+                        <input class="input" type="number" name="duration_min" value="{{ ((a.end_at - a.start_at).seconds // 60) }}" min="10" max="240" required>
+                        <button class="btn btn-primary btn-sm" type="submit">Guardar</button>
+                      </div>
+                    </form>
+                  </details>
+                {% endif %}
+
               </div>
             </div>
           {% endfor %}

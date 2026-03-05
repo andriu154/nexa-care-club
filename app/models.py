@@ -1,201 +1,397 @@
-from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Boolean
-from sqlalchemy.orm import relationship
+from datetime import datetime, timedelta
+import os
+from zoneinfo import ZoneInfo
 
-from .database import Base
+from fastapi import APIRouter, Depends, Request, HTTPException
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
+from sqlalchemy.orm import Session, joinedload
+
+from ..database import get_db
+from ..models import Appointment, Patient, Encounter, Doctor, ClinicalNote, EncounterEvolution
+from .auth import get_logged_doctor
+
+router = APIRouter(tags=["UI"])
+templates = Jinja2Templates(directory="app/templates")
+
+APP_TZ = ZoneInfo(os.getenv("APP_TIMEZONE", "America/Guayaquil"))
+
+
+def _now_local() -> datetime:
+    return datetime.now(APP_TZ)
+
+
+def _redirect_login():
+    return RedirectResponse(url="/login", status_code=302)
+
+
+def _require_login(request: Request, db: Session):
+    doctor = get_logged_doctor(request, db)
+    if not doctor:
+        return None
+    return doctor
+
+
+def _parse_date(s: str | None):
+    if not s:
+        return None
+    try:
+        return datetime.strptime(s, "%Y-%m-%d").date()
+    except Exception:
+        return None
+
+
+def _is_editable(enc: Encounter) -> bool:
+    if enc.ended_at is None:
+        return True
+    # ventana edición 20 min
+    now_local_naive = _now_local().replace(tzinfo=None)
+    return now_local_naive <= (enc.ended_at + timedelta(minutes=20))
+
+
+def _set_badge_and_autocancel(db: Session, appt: Appointment, now_naive: datetime) -> str:
+    """
+    Reglas:
+    - Verde "A tiempo": desde 10 min antes hasta +5 min después
+    - Naranja "Atrasado": > +5 min hasta +10 min
+    - Cancelado auto: > +10 min si NO se abrió historia (no encounter_id)
+    - Si encounter_id: "En atención"
+    - Si status canceled/no_show: "Cancelado"
+    - Si status completed: "Completado"
+    """
+    # estados fuertes primero
+    if appt.status in ("canceled", "no_show"):
+        return "cancelado"
+    if appt.status == "completed":
+        return "completado"
+    if appt.encounter_id:
+        return "en_atencion"
+
+    # sin encounter, evaluar tiempos
+    start_at = appt.start_at  # naive local
+    if not start_at:
+        return "pendiente"
+
+    # minutos desde hora de inicio (positivo si ya pasó)
+    delta_min = (now_naive - start_at).total_seconds() / 60.0
+
+    # aún no llega (pero dentro de ventana verde)
+    if delta_min < -10:
+        return "pendiente"
+
+    # verde: -10 a +5
+    if -10 <= delta_min <= 5:
+        return "a_tiempo"
+
+    # naranja: +5 a +10
+    if 5 < delta_min <= 10:
+        return "atrasado"
+
+    # > +10: auto cancel si no hay encounter
+    if delta_min > 10:
+        appt.status = "canceled"
+        appt.updated_at = now_naive
+        return "cancelado_auto"
+
+    return "pendiente"
 
 
 # =========================
-# DOCTOR
+# DASHBOARD (ayer → +7 días)
 # =========================
-class Doctor(Base):
-    __tablename__ = "doctors"
+@router.get("/app", response_class=HTMLResponse)
+def ui_dashboard(request: Request, db: Session = Depends(get_db), date: str | None = None):
+    current_doctor = _require_login(request, db)
+    if not current_doctor:
+        return _redirect_login()
 
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False)
+    base_date = _parse_date(date) or _now_local().date()
+    start_date = base_date - timedelta(days=1)
+    end_date = base_date + timedelta(days=7)
 
-    specialty = Column(String, nullable=True)
-    registration = Column(String, unique=True, index=True, nullable=False)
+    prev_date = (base_date - timedelta(days=1)).isoformat()
+    next_date = (base_date + timedelta(days=1)).isoformat()
 
-    password_hash = Column(String, nullable=True)
+    start_dt = datetime(start_date.year, start_date.month, start_date.day, 0, 0, 0)
+    end_dt = datetime(end_date.year, end_date.month, end_date.day, 23, 59, 59)
 
-    # ✅ IMPORTANTE: tu DB en Render exige doctors.pin NOT NULL
-    pin = Column(String, nullable=False, default="0000")
-
-    encounters = relationship("Encounter", back_populates="doctor")
-    appointments = relationship("Appointment", back_populates="doctor")
-
-
-# =========================
-# PATIENT
-# =========================
-class Patient(Base):
-    __tablename__ = "patients"
-
-    id = Column(Integer, primary_key=True, index=True)
-
-    cedula = Column(String, unique=True, index=True, nullable=True)
-    full_name = Column(String, nullable=False)
-    phone = Column(String, nullable=True)
-
-    qr_code = Column(String, unique=True, index=True, nullable=True)
-
-    total_sessions = Column(Integer, default=0, nullable=False)
-    completed_sessions = Column(Integer, default=0, nullable=False)
-
-    status = Column(String, default="Activo", nullable=False)
-
-    # ✅ FIX: tu BD exige created_at NOT NULL
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, nullable=True)
-
-    encounters = relationship("Encounter", back_populates="patient")
-    attendances = relationship("Attendance", back_populates="patient")
-    appointments = relationship("Appointment", back_populates="patient")
-
-
-# =========================
-# APPOINTMENT (AGENDA)
-# =========================
-class Appointment(Base):
-    __tablename__ = "appointments"
-
-    id = Column(Integer, primary_key=True, index=True)
-
-    doctor_id = Column(Integer, ForeignKey("doctors.id"), nullable=False, index=True)
-    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False, index=True)
-
-    start_at = Column(DateTime, nullable=False, index=True)
-    end_at = Column(DateTime, nullable=False)
-
-    status = Column(String, default="scheduled", nullable=False)
-    # scheduled | confirmed | completed | canceled | no_show
-
-    reason = Column(String, nullable=True)
-    notes = Column(Text, nullable=True)
-
-    encounter_id = Column(
-        Integer,
-        ForeignKey("encounters.id"),
-        nullable=True,
-        index=True
+    appts = (
+        db.query(Appointment)
+        .options(joinedload(Appointment.patient))
+        .filter(Appointment.doctor_id == current_doctor.id)
+        .filter(Appointment.start_at >= start_dt)
+        .filter(Appointment.start_at <= end_dt)
+        # ✅ NO filtrar canceled: queremos mostrar "Cancelado"
+        .order_by(Appointment.start_at.asc())
+        .all()
     )
 
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, nullable=True)
+    now_naive = _now_local().replace(tzinfo=None)
 
-    doctor = relationship("Doctor", back_populates="appointments")
-    patient = relationship("Patient", back_populates="appointments")
+    # ✅ setear badge + auto-cancelar si aplica
+    touched = False
+    for a in appts:
+        badge = _set_badge_and_autocancel(db, a, now_naive)
+        # guardamos badge en el objeto para el template
+        setattr(a, "ui_badge", badge)
+        if badge == "cancelado_auto":
+            touched = True
 
-    encounter = relationship(
-        "Encounter",
-        back_populates="appointment",
-        uselist=False
+    if touched:
+        db.commit()
+
+    days = {}
+    for a in appts:
+        k = a.start_at.date().isoformat() if a.start_at else "NO_DATE"
+        days.setdefault(k, []).append(a)
+
+    ordered_days = []
+    d = start_date
+    while d <= end_date:
+        ordered_days.append(d.isoformat())
+        d += timedelta(days=1)
+
+    ctx = {
+        "request": request,
+        "current_doctor": current_doctor,
+        "base_date": base_date,
+        "start_date": start_date,
+        "end_date": end_date,
+        "prev_date": prev_date,
+        "next_date": next_date,
+        "ordered_days": ordered_days,
+        "days": days,
+    }
+
+    html = templates.get_template("dashboard.html").render(**ctx)
+    return HTMLResponse(html)
+
+
+# =========================
+# PACIENTES
+# =========================
+@router.get("/app/patients", response_class=HTMLResponse)
+def ui_patients(request: Request, db: Session = Depends(get_db)):
+    current_doctor = _require_login(request, db)
+    if not current_doctor:
+        return _redirect_login()
+
+    patients = db.query(Patient).order_by(Patient.id.desc()).all()
+    return templates.TemplateResponse(
+        "patients.html",
+        {"request": request, "current_doctor": current_doctor, "patients": patients},
     )
 
 
-# =========================
-# ENCOUNTER (ATENCIÓN)
-# =========================
-class Encounter(Base):
-    __tablename__ = "encounters"
+@router.get("/app/patients/{patient_id}", response_class=HTMLResponse)
+def ui_patient_detail(patient_id: int, request: Request, db: Session = Depends(get_db)):
+    current_doctor = _require_login(request, db)
+    if not current_doctor:
+        return _redirect_login()
 
-    id = Column(Integer, primary_key=True, index=True)
+    patient = db.query(Patient).filter(Patient.id == patient_id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Paciente no encontrado")
 
-    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
-    doctor_id = Column(Integer, ForeignKey("doctors.id"), nullable=False)
-
-    visit_type = Column(String, nullable=True)
-    chief_complaint_short = Column(String, nullable=True)
-
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    ended_at = Column(DateTime, nullable=True)
-    is_signed = Column(Boolean, default=False, nullable=False)
-
-    patient = relationship("Patient", back_populates="encounters")
-    doctor = relationship("Doctor", back_populates="encounters")
-
-    note = relationship(
-        "ClinicalNote",
-        uselist=False,
-        back_populates="encounter"
-    )
-    evolutions = relationship(
-        "EncounterEvolution",
-        back_populates="encounter"
+    encounters = (
+        db.query(Encounter)
+        .filter(Encounter.patient_id == patient_id)
+        .order_by(Encounter.created_at.desc(), Encounter.id.desc())
+        .all()
     )
 
-    appointment = relationship(
-        "Appointment",
-        back_populates="encounter",
-        uselist=False
+    items = []
+    for enc in encounters:
+        doc = db.query(Doctor).filter(Doctor.id == enc.doctor_id).first()
+        items.append({"enc": enc, "doc": doc, "pdf_url": f"/encounters/{enc.id}/pdf"})
+
+    return templates.TemplateResponse(
+        "patient_detail.html",
+        {
+            "request": request,
+            "current_doctor": current_doctor,
+            "patient": patient,
+            "items": items,
+            "pdf_consolidated_url": f"/patients/{patient.id}/history/pdf",
+        },
     )
 
 
-# =========================
-# CLINICAL NOTE
-# =========================
-class ClinicalNote(Base):
-    __tablename__ = "clinical_notes"
+@router.post("/app/patients/{patient_id}/new-encounter")
+def ui_new_encounter(patient_id: int, request: Request, db: Session = Depends(get_db)):
+    current_doctor = _require_login(request, db)
+    if not current_doctor:
+        return _redirect_login()
 
-    id = Column(Integer, primary_key=True, index=True)
-    encounter_id = Column(
-        Integer,
-        ForeignKey("encounters.id"),
-        nullable=False,
-        unique=True
+    patient = db.query(Patient).filter(Patient.id == patient_id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Paciente no encontrado")
+
+    now_naive = _now_local().replace(tzinfo=None)
+
+    enc = Encounter(
+        patient_id=patient.id,
+        doctor_id=current_doctor.id,
+        visit_type="Ambulatorio",
+        chief_complaint_short="",
+        created_at=now_naive,
+        ended_at=None,
+        is_signed=False,
+    )
+    db.add(enc)
+    db.commit()
+    db.refresh(enc)
+
+    return RedirectResponse(url=f"/app/encounters/{enc.id}", status_code=302)
+
+
+# =========================
+# ENCOUNTER
+# =========================
+@router.get("/app/encounters/{encounter_id}", response_class=HTMLResponse)
+def ui_encounter(encounter_id: int, request: Request, db: Session = Depends(get_db)):
+    current_doctor = _require_login(request, db)
+    if not current_doctor:
+        return _redirect_login()
+
+    enc = db.query(Encounter).filter(Encounter.id == encounter_id).first()
+    if not enc:
+        raise HTTPException(status_code=404, detail="Consulta no encontrada")
+
+    patient = db.query(Patient).filter(Patient.id == enc.patient_id).first()
+    doc = db.query(Doctor).filter(Doctor.id == enc.doctor_id).first()
+
+    note = db.query(ClinicalNote).filter(ClinicalNote.encounter_id == encounter_id).first()
+    evols = (
+        db.query(EncounterEvolution)
+        .filter(EncounterEvolution.encounter_id == encounter_id)
+        .order_by(EncounterEvolution.created_at.asc())
+        .all()
     )
 
-    chief_complaint = Column(Text, nullable=True)
-    hpi = Column(Text, nullable=True)
+    editable_window = _is_editable(enc)
+    is_owner = (enc.doctor_id == current_doctor.id)
+    can_edit_note = is_owner and editable_window
 
-    physical_exam = Column(Text, nullable=True)
-    complementary_tests = Column(Text, nullable=True)
-    assessment_dx = Column(Text, nullable=True)
-    plan_treatment = Column(Text, nullable=True)
-    indications_alarm_signs = Column(Text, nullable=True)
-    follow_up = Column(Text, nullable=True)
-
-    ta_sys = Column(Integer, nullable=True)
-    ta_dia = Column(Integer, nullable=True)
-    hr = Column(Integer, nullable=True)
-    rr = Column(Integer, nullable=True)
-    temp = Column(String, nullable=True)
-    spo2 = Column(Integer, nullable=True)
-
-    encounter = relationship("Encounter", back_populates="note")
-
-
-# =========================
-# ENCOUNTER EVOLUTION
-# =========================
-class EncounterEvolution(Base):
-    __tablename__ = "encounter_evolutions"
-
-    id = Column(Integer, primary_key=True, index=True)
-    encounter_id = Column(Integer, ForeignKey("encounters.id"), nullable=False)
-
-    author_doctor_id = Column(Integer, ForeignKey("doctors.id"), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-
-    content = Column(Text, nullable=False)
-
-    encounter = relationship("Encounter", back_populates="evolutions")
+    return templates.TemplateResponse(
+        "encounter.html",
+        {
+            "request": request,
+            "current_doctor": current_doctor,
+            "enc": enc,
+            "patient": patient,
+            "doc": doc,
+            "note": note,
+            "evols": evols,
+            "editable": editable_window,
+            "is_owner": is_owner,
+            "can_edit_note": can_edit_note,
+            "pdf_url": f"/encounters/{enc.id}/pdf",
+        },
+    )
 
 
-# =========================
-# ATTENDANCE (SESIONES)
-# =========================
-class Attendance(Base):
-    __tablename__ = "attendance"
+@router.post("/app/encounters/{encounter_id}/save-note")
+async def ui_save_note(encounter_id: int, request: Request, db: Session = Depends(get_db)):
+    current_doctor = _require_login(request, db)
+    if not current_doctor:
+        return _redirect_login()
 
-    id = Column(Integer, primary_key=True, index=True)
+    enc = db.query(Encounter).filter(Encounter.id == encounter_id).first()
+    if not enc:
+        raise HTTPException(status_code=404, detail="Consulta no encontrada")
 
-    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
-    doctor_id = Column(Integer, ForeignKey("doctors.id"), nullable=True)
+    if enc.doctor_id != current_doctor.id:
+        raise HTTPException(status_code=403, detail="No autorizado")
 
-    session_number = Column(Integer, nullable=False)
-    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
+    if not _is_editable(enc):
+        raise HTTPException(
+            status_code=403,
+            detail="Ventana de edición cerrada (20 min). Usa Evolución/Addendum para correcciones."
+        )
 
-    patient = relationship("Patient", back_populates="attendances")
-    doctor = relationship("Doctor", backref="attendances")
+    form = await request.form()
+
+    enc.chief_complaint_short = (form.get("chief_complaint_short") or "").strip()[:120]
+    enc.visit_type = (form.get("visit_type") or enc.visit_type or "Ambulatorio").strip()[:50]
+
+    note = db.query(ClinicalNote).filter(ClinicalNote.encounter_id == encounter_id).first()
+    if not note:
+        note = ClinicalNote(encounter_id=encounter_id)
+        db.add(note)
+
+    note.chief_complaint = (form.get("chief_complaint") or "").strip()
+    note.hpi = (form.get("hpi") or "").strip()
+    note.physical_exam = (form.get("physical_exam") or "").strip()
+    note.complementary_tests = (form.get("complementary_tests") or "").strip()
+    note.assessment_dx = (form.get("assessment_dx") or "").strip()
+    note.plan_treatment = (form.get("plan_treatment") or "").strip()
+    note.indications_alarm_signs = (form.get("indications_alarm_signs") or "").strip()
+    note.follow_up = (form.get("follow_up") or "").strip()
+
+    def to_int(v):
+        v = (v or "").strip()
+        if v == "":
+            return None
+        try:
+            return int(v)
+        except Exception:
+            return None
+
+    note.ta_sys = to_int(form.get("ta_sys"))
+    note.ta_dia = to_int(form.get("ta_dia"))
+    note.hr = to_int(form.get("hr"))
+    note.rr = to_int(form.get("rr"))
+    note.spo2 = to_int(form.get("spo2"))
+
+    temp = (form.get("temp") or "").strip()
+    note.temp = temp if temp else None
+
+    db.commit()
+    return RedirectResponse(url=f"/app/encounters/{encounter_id}", status_code=302)
+
+
+@router.post("/app/encounters/{encounter_id}/end")
+def ui_end_encounter(encounter_id: int, request: Request, db: Session = Depends(get_db)):
+    current_doctor = _require_login(request, db)
+    if not current_doctor:
+        return _redirect_login()
+
+    enc = db.query(Encounter).filter(Encounter.id == encounter_id).first()
+    if not enc:
+        raise HTTPException(status_code=404, detail="Consulta no encontrada")
+
+    if enc.doctor_id != current_doctor.id:
+        raise HTTPException(status_code=403, detail="No autorizado")
+
+    if enc.ended_at is None:
+        enc.ended_at = _now_local().replace(tzinfo=None)
+        db.commit()
+
+    return RedirectResponse(url=f"/app/encounters/{encounter_id}", status_code=302)
+
+
+@router.post("/app/encounters/{encounter_id}/add-evolution")
+async def ui_add_evolution(encounter_id: int, request: Request, db: Session = Depends(get_db)):
+    current_doctor = _require_login(request, db)
+    if not current_doctor:
+        return _redirect_login()
+
+    enc = db.query(Encounter).filter(Encounter.id == encounter_id).first()
+    if not enc:
+        raise HTTPException(status_code=404, detail="Consulta no encontrada")
+
+    form = await request.form()
+    content = (form.get("content") or "").strip()
+    if not content:
+        return RedirectResponse(url=f"/app/encounters/{encounter_id}", status_code=302)
+
+    ev = EncounterEvolution(
+        encounter_id=encounter_id,
+        author_doctor_id=current_doctor.id,
+        content=content,
+    )
+    db.add(ev)
+    db.commit()
+
+    return RedirectResponse(url=f"/app/encounters/{encounter_id}", status_code=302)
