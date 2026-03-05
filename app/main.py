@@ -28,7 +28,6 @@ from .routes.appointments_ui import router as appointments_ui_router
 
 app = FastAPI(title="NexaCenter")
 
-# 🔐 Middleware de sesión (LOGIN UI)
 app.add_middleware(
     SessionMiddleware,
     secret_key=os.getenv("SESSION_SECRET", "dev-secret-change-me"),
@@ -36,7 +35,6 @@ app.add_middleware(
     https_only=True,
 )
 
-# ✅ hash de contraseñas
 pwd_context = CryptContext(
     schemes=["pbkdf2_sha256", "bcrypt"],
     deprecated="auto",
@@ -44,10 +42,6 @@ pwd_context = CryptContext(
 
 
 def ensure_sqlite_schema():
-    """
-    SQLite no se migra solo con create_all().
-    Esto agrega columnas faltantes en tablas ya existentes.
-    """
     try:
         with engine.begin() as conn:
             # doctors
@@ -74,7 +68,7 @@ def ensure_sqlite_schema():
                     conn.execute(text("ALTER TABLE doctors ADD COLUMN pin VARCHAR NOT NULL DEFAULT '0000';"))
                     print("✅ Migración: doctors.pin agregado")
 
-            # patients (por si Render tiene DB vieja)
+            # patients
             tblp = conn.execute(
                 text("SELECT name FROM sqlite_master WHERE type='table' AND name='patients';")
             ).fetchone()
@@ -92,7 +86,7 @@ def ensure_sqlite_schema():
 
                 if "created_at" not in col_names:
                     conn.execute(text("ALTER TABLE patients ADD COLUMN created_at DATETIME;"))
-                    print("✅ Migración: patients.created_at agregado (nullable por SQLite ALTER)")
+                    print("✅ Migración: patients.created_at agregado")
 
                 if "updated_at" not in col_names:
                     conn.execute(text("ALTER TABLE patients ADD COLUMN updated_at DATETIME;"))
@@ -103,10 +97,6 @@ def ensure_sqlite_schema():
 
 
 def seed_default_doctors_if_enabled():
-    """
-    Crea doctores desde variables de entorno (Render).
-    Solo corre si SEED_DEFAULT_DOCTORS=1.
-    """
     if os.getenv("SEED_DEFAULT_DOCTORS", "0") != "1":
         return
 
@@ -137,7 +127,6 @@ def seed_default_doctors_if_enabled():
                 continue
 
             hashed = pwd_context.hash(plain_pass)
-
             d = Doctor(
                 name=name,
                 registration=reg,
@@ -156,16 +145,12 @@ def seed_default_doctors_if_enabled():
         db.close()
 
 
-# 1️⃣ crear tablas
+# ✅ init
 Base.metadata.create_all(bind=engine)
-
-# 2️⃣ migraciones SQLite
 ensure_sqlite_schema()
-
-# 3️⃣ seed doctores
 seed_default_doctors_if_enabled()
 
-# 4️⃣ rutas API
+# ✅ API
 app.include_router(auth_router)
 app.include_router(doctors_router)
 app.include_router(patients_router)
@@ -177,11 +162,10 @@ app.include_router(clinical_notes_router)
 app.include_router(pdf_router)
 app.include_router(history_router)
 
-# 5️⃣ rutas UI (ESTO ES LO QUE TE FALTABA / SE ROMPIÓ)
+# ✅ UI (DEBE QUEDAR ASÍ)
 app.include_router(ui_router)
 app.include_router(appointments_ui_router)
 
-# 6️⃣ archivos estáticos
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 
