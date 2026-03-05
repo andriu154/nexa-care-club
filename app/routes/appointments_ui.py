@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta
 import secrets
+import os
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Request, HTTPException, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -13,6 +15,13 @@ from .auth import get_logged_doctor
 
 router = APIRouter(tags=["Appointments UI"])
 templates = Jinja2Templates(directory="app/templates")
+
+# ✅ Zona horaria de la app (cámbiala si aplica)
+APP_TZ = ZoneInfo(os.getenv("APP_TIMEZONE", "America/Guayaquil"))
+
+
+def _now_local() -> datetime:
+    return datetime.now(APP_TZ)
 
 
 def _redirect_login():
@@ -53,16 +62,16 @@ def _generate_qr_code(db: Session) -> str:
 def _overlaps(
     db: Session,
     doctor_id: int,
-    start_at: datetime,
-    end_at: datetime,
+    start_at_naive: datetime,
+    end_at_naive: datetime,
     exclude_id: int | None = None,
 ) -> bool:
     q = (
         db.query(Appointment)
         .filter(Appointment.doctor_id == doctor_id)
         .filter(Appointment.status != "canceled")
-        .filter(Appointment.start_at < end_at)
-        .filter(Appointment.end_at > start_at)
+        .filter(Appointment.start_at < end_at_naive)
+        .filter(Appointment.end_at > start_at_naive)
     )
     if exclude_id:
         q = q.filter(Appointment.id != exclude_id)
@@ -70,14 +79,15 @@ def _overlaps(
 
 
 def _can_start_now(appt: Appointment) -> bool:
-    now = datetime.utcnow()
+    # asumimos que start_at/end_at guardan "hora local" (naive)
+    now_local_naive = _now_local().replace(tzinfo=None)
     start_window = appt.start_at - timedelta(minutes=15)
     end_window = appt.end_at + timedelta(minutes=30)
-    return start_window <= now <= end_window
+    return start_window <= now_local_naive <= end_window
 
 
 # =========================
-# FORM: NUEVA CITA (con búsqueda por cédula)
+# FORM: NUEVA CITA
 # =========================
 @router.get("/app/appointments/new", response_class=HTMLResponse)
 def new_appointment_form(
@@ -90,7 +100,7 @@ def new_appointment_form(
     if not current_doctor:
         return _redirect_login()
 
-    d = _parse_date(date) or datetime.utcnow().date()
+    d = _parse_date(date) or _now_local().date()
 
     ced = _clean_cedula(cedula or "")
     patient = _find_patient_by_cedula(db, ced) if ced else None
@@ -113,7 +123,7 @@ def new_appointment_form(
 
 
 # =========================
-# QUICK CREATE PACIENTE DESDE FORM (si no existe por cédula)
+# QUICK CREATE PACIENTE
 # =========================
 @router.post("/app/patients/quick-create")
 def quick_create_patient(
@@ -128,7 +138,7 @@ def quick_create_patient(
     if not current_doctor:
         return _redirect_login()
 
-    d = _parse_date(date) or datetime.utcnow().date()
+    d = _parse_date(date) or _now_local().date()
 
     ced = _clean_cedula(cedula)
     if not ced:
@@ -145,6 +155,8 @@ def quick_create_patient(
             status_code=HTTP_303_SEE_OTHER,
         )
 
+    now_local_naive = _now_local().replace(tzinfo=None)
+
     p = Patient(
         cedula=ced,
         full_name=name,
@@ -153,8 +165,8 @@ def quick_create_patient(
         total_sessions=0,
         completed_sessions=0,
         status="Activo",
-        created_at=datetime.utcnow(),  # ✅ evita NOT NULL patients.created_at
-        updated_at=datetime.utcnow(),
+        created_at=now_local_naive,
+        updated_at=now_local_naive,
     )
     db.add(p)
     db.commit()
@@ -189,12 +201,15 @@ def create_appointment(
 
     try:
         hh, mm = time.split(":")
+        # guardamos como naive pero interpretado como hora local
         start_at = datetime(d.year, d.month, d.day, int(hh), int(mm))
     except Exception:
         raise HTTPException(status_code=400, detail="Hora inválida")
 
-    # 🔥 REGLA: NO permitir pasado (pero SÍ permitir hoy más tarde)
-    if start_at < datetime.utcnow() - timedelta(minutes=1):
+    now_local_naive = _now_local().replace(tzinfo=None)
+
+    # ✅ NO pasado usando hora local
+    if start_at < now_local_naive - timedelta(minutes=1):
         raise HTTPException(status_code=400, detail="No puedes agendar una cita en el pasado.")
 
     if duration_min < 10 or duration_min > 240:
@@ -217,7 +232,7 @@ def create_appointment(
         status="scheduled",
         reason=(reason or "").strip()[:120] if reason else None,
         notes=(notes or "").strip() if notes else None,
-        updated_at=datetime.utcnow(),
+        updated_at=now_local_naive,
     )
     db.add(appt)
     db.commit()
@@ -226,7 +241,7 @@ def create_appointment(
 
 
 # =========================
-# CANCELAR CITA
+# CANCELAR
 # =========================
 @router.post("/app/appointments/{appointment_id}/cancel")
 def cancel_appointment(
@@ -247,15 +262,15 @@ def cancel_appointment(
         raise HTTPException(status_code=403, detail="No autorizado")
 
     appt.status = "canceled"
-    appt.updated_at = datetime.utcnow()
+    appt.updated_at = _now_local().replace(tzinfo=None)
     db.commit()
 
-    d = _parse_date(date) or datetime.utcnow().date()
+    d = _parse_date(date) or _now_local().date()
     return RedirectResponse(url=f"/app?date={d.isoformat()}", status_code=HTTP_303_SEE_OTHER)
 
 
 # =========================
-# REAGENDAR CITA
+# REAGENDAR
 # =========================
 @router.post("/app/appointments/{appointment_id}/reschedule")
 def reschedule_appointment(
@@ -287,7 +302,9 @@ def reschedule_appointment(
     except Exception:
         raise HTTPException(status_code=400, detail="Hora inválida")
 
-    if start_at < datetime.utcnow() - timedelta(minutes=1):
+    now_local_naive = _now_local().replace(tzinfo=None)
+
+    if start_at < now_local_naive - timedelta(minutes=1):
         raise HTTPException(status_code=400, detail="No puedes reagendar una cita al pasado")
 
     if duration_min < 10 or duration_min > 240:
@@ -300,14 +317,14 @@ def reschedule_appointment(
 
     appt.start_at = start_at
     appt.end_at = end_at
-    appt.updated_at = datetime.utcnow()
+    appt.updated_at = now_local_naive
     db.commit()
 
     return RedirectResponse(url=f"/app?date={d.isoformat()}", status_code=HTTP_303_SEE_OTHER)
 
 
 # =========================
-# INICIAR ATENCIÓN DESDE CITA
+# START ENCOUNTER
 # =========================
 @router.post("/app/appointments/{appointment_id}/start")
 def start_encounter_from_appointment(
@@ -346,12 +363,14 @@ def start_encounter_from_appointment(
             detail="Aún no estás dentro de la ventana de atención (15 min antes hasta 30 min después)."
         )
 
+    now_local_naive = _now_local().replace(tzinfo=None)
+
     enc = Encounter(
         patient_id=appt.patient_id,
         doctor_id=current_doctor.id,
         visit_type="Ambulatorio",
         chief_complaint_short=(appt.reason or "")[:120] if appt.reason else "",
-        created_at=datetime.utcnow(),
+        created_at=now_local_naive,
         ended_at=None,
         is_signed=False,
     )
@@ -360,14 +379,14 @@ def start_encounter_from_appointment(
     db.refresh(enc)
 
     appt.encounter_id = enc.id
-    appt.updated_at = datetime.utcnow()
+    appt.updated_at = now_local_naive
     db.commit()
 
     return RedirectResponse(url=f"/app/encounters/{enc.id}", status_code=HTTP_303_SEE_OTHER)
 
 
 # =========================
-# NO ASISTE (motivo obligatorio)
+# NO SHOW
 # =========================
 @router.post("/app/appointments/{appointment_id}/no-show")
 def mark_no_show(
@@ -396,9 +415,9 @@ def mark_no_show(
         raise HTTPException(status_code=400, detail="El motivo es obligatorio")
 
     appt.status = "no_show"
-    appt.updated_at = datetime.utcnow()
+    appt.updated_at = _now_local().replace(tzinfo=None)
 
-    stamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    stamp = _now_local().strftime("%Y-%m-%d %H:%M %Z")
     entry = f"[{stamp}] NO_SHOW: {motivo}"
     if appt.notes and appt.notes.strip():
         appt.notes = appt.notes.rstrip() + "\n" + entry
@@ -407,5 +426,5 @@ def mark_no_show(
 
     db.commit()
 
-    d = _parse_date(date) or datetime.utcnow().date()
+    d = _parse_date(date) or _now_local().date()
     return RedirectResponse(url=f"/app?date={d.isoformat()}", status_code=HTTP_303_SEE_OTHER)
