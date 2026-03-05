@@ -2,7 +2,6 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 import os
-from pathlib import Path
 
 from sqlalchemy import text
 from passlib.context import CryptContext
@@ -24,33 +23,19 @@ from .routes.history import router as history_router
 from .routes.appointments_ui import router as appointments_ui_router
 
 
-# ===== Paths robustos (funciona igual en Render y local) =====
-BASE_DIR = Path(__file__).resolve().parent          # .../app
-TEMPLATES_DIR = BASE_DIR / "templates"             # .../app/templates
-STATIC_DIR = BASE_DIR / "static"                   # .../app/static
-
-
 app = FastAPI(title="NexaCenter")
 
-# ===== Sesiones (Login UI) =====
-# En Render debes usar HTTPS (https_only=True).
-# En local normalmente NO (https_only=False) para no romper cookies.
-ENV = (os.getenv("ENV") or os.getenv("RENDER") or "").lower()
-IS_PROD = ENV in ("production", "prod", "true", "1") or os.getenv("RENDER") is not None
-
-SESSION_SECRET = os.getenv("SESSION_SECRET", "dev-secret-change-me")
-if SESSION_SECRET == "dev-secret-change-me" and IS_PROD:
-    # No rompe el deploy, pero te avisa en logs
-    print("⚠️ SESSION_SECRET está en default. Configúralo en Render Environment Variables.")
+# 🔐 Middleware de sesión (LOGIN UI)
+IS_PROD = os.getenv("RENDER") is not None or (os.getenv("ENV", "").lower() in ("prod", "production", "1", "true"))
 
 app.add_middleware(
     SessionMiddleware,
-    secret_key=SESSION_SECRET,
+    secret_key=os.getenv("SESSION_SECRET", "dev-secret-change-me"),
     same_site="lax",
-    https_only=IS_PROD,  # ✅ en producción True, en local False
+    https_only=IS_PROD,
 )
 
-# ===== Hash de contraseñas =====
+# ✅ hash de contraseñas
 pwd_context = CryptContext(
     schemes=["pbkdf2_sha256", "bcrypt"],
     deprecated="auto",
@@ -64,34 +49,59 @@ def ensure_sqlite_schema():
     """
     try:
         with engine.begin() as conn:
+            # -------------------------
+            # doctors
+            # -------------------------
             tbl = conn.execute(
                 text("SELECT name FROM sqlite_master WHERE type='table' AND name='doctors';")
             ).fetchone()
 
-            if not tbl:
+            if tbl:
+                cols = conn.execute(text("PRAGMA table_info(doctors);")).fetchall()
+                col_names = {c[1] for c in cols}
+
+                if "specialty" not in col_names:
+                    conn.execute(text("ALTER TABLE doctors ADD COLUMN specialty VARCHAR;"))
+                    print("✅ Migración: doctors.specialty agregado")
+
+                if "registration" not in col_names:
+                    conn.execute(text("ALTER TABLE doctors ADD COLUMN registration VARCHAR;"))
+                    print("✅ Migración: doctors.registration agregado")
+
+                if "password_hash" not in col_names:
+                    conn.execute(text("ALTER TABLE doctors ADD COLUMN password_hash VARCHAR;"))
+                    print("✅ Migración: doctors.password_hash agregado")
+
+                if "pin" not in col_names:
+                    conn.execute(text("ALTER TABLE doctors ADD COLUMN pin VARCHAR NOT NULL DEFAULT '0000';"))
+                    print("✅ Migración: doctors.pin agregado")
+            else:
                 print("ℹ️ Tabla doctors no existe todavía.")
-                return
 
-            cols = conn.execute(text("PRAGMA table_info(doctors);")).fetchall()
-            col_names = {c[1] for c in cols}
+            # -------------------------
+            # patients (✅ cedula + phone)
+            # -------------------------
+            tbl_pat = conn.execute(
+                text("SELECT name FROM sqlite_master WHERE type='table' AND name='patients';")
+            ).fetchone()
 
-            if "specialty" not in col_names:
-                conn.execute(text("ALTER TABLE doctors ADD COLUMN specialty VARCHAR;"))
-                print("✅ Migración: doctors.specialty agregado")
+            if tbl_pat:
+                cols_p = conn.execute(text("PRAGMA table_info(patients);")).fetchall()
+                p_col_names = {c[1] for c in cols_p}
 
-            if "registration" not in col_names:
-                conn.execute(text("ALTER TABLE doctors ADD COLUMN registration VARCHAR;"))
-                print("✅ Migración: doctors.registration agregado")
+                if "cedula" not in p_col_names:
+                    conn.execute(text("ALTER TABLE patients ADD COLUMN cedula VARCHAR;"))
+                    print("✅ Migración: patients.cedula agregado")
 
-            if "password_hash" not in col_names:
-                conn.execute(text("ALTER TABLE doctors ADD COLUMN password_hash VARCHAR;"))
-                print("✅ Migración: doctors.password_hash agregado")
+                if "phone" not in p_col_names:
+                    conn.execute(text("ALTER TABLE patients ADD COLUMN phone VARCHAR;"))
+                    print("✅ Migración: patients.phone agregado")
 
-            if "pin" not in col_names:
-                conn.execute(
-                    text("ALTER TABLE doctors ADD COLUMN pin VARCHAR NOT NULL DEFAULT '0000';")
-                )
-                print("✅ Migración: doctors.pin agregado")
+                # índices (SQLite)
+                conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ux_patients_cedula ON patients(cedula);"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_patients_cedula ON patients(cedula);"))
+            else:
+                print("ℹ️ Tabla patients no existe todavía.")
 
     except Exception as e:
         print("⚠️ Error en migración SQLite:", repr(e))
@@ -151,16 +161,16 @@ def seed_default_doctors_if_enabled():
         db.close()
 
 
-# ===== 1) Crear tablas =====
+# 1️⃣ crear tablas
 Base.metadata.create_all(bind=engine)
 
-# ===== 2) Migraciones SQLite =====
+# 2️⃣ migraciones SQLite
 ensure_sqlite_schema()
 
-# ===== 3) Seed doctores =====
+# 3️⃣ seed doctores
 seed_default_doctors_if_enabled()
 
-# ===== 4) Rutas =====
+# 4️⃣ rutas
 app.include_router(auth_router)
 app.include_router(doctors_router)
 app.include_router(patients_router)
@@ -176,12 +186,8 @@ app.include_router(clinical_notes_router)
 app.include_router(pdf_router)
 app.include_router(history_router)
 
-# ===== 5) Archivos estáticos =====
-# Si no existe, no rompas el arranque en producción:
-if STATIC_DIR.exists():
-    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-else:
-    print(f"⚠️ STATIC_DIR no existe: {STATIC_DIR}")
+# 5️⃣ archivos estáticos
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 
 @app.get("/")

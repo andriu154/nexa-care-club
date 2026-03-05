@@ -14,10 +14,14 @@ def _generate_qr_code(db: Session) -> str:
     Ejemplo: QR-8F3K2P9A
     """
     while True:
-        code = "QR-" + secrets.token_hex(4).upper()  # 8 chars
+        code = "QR-" + secrets.token_hex(4).upper()
         exists = db.query(Patient).filter(Patient.qr_code == code).first()
         if not exists:
             return code
+
+
+def _clean_cedula(s: str) -> str:
+    return "".join(ch for ch in (s or "") if ch.isdigit()).strip()
 
 
 @router.get("/")
@@ -26,7 +30,9 @@ def list_patients(db: Session = Depends(get_db)):
     return [
         {
             "id": p.id,
+            "cedula": p.cedula,
             "full_name": p.full_name,
+            "phone": p.phone,
             "qr_code": p.qr_code,
             "total_sessions": p.total_sessions,
             "completed_sessions": p.completed_sessions,
@@ -44,7 +50,31 @@ def get_patient(patient_id: int, db: Session = Depends(get_db)):
 
     return {
         "id": p.id,
+        "cedula": p.cedula,
         "full_name": p.full_name,
+        "phone": p.phone,
+        "qr_code": p.qr_code,
+        "total_sessions": p.total_sessions,
+        "completed_sessions": p.completed_sessions,
+        "status": p.status,
+    }
+
+
+@router.get("/cedula/{cedula}")
+def get_patient_by_cedula(cedula: str, db: Session = Depends(get_db)):
+    ced = _clean_cedula(cedula)
+    if not ced:
+        raise HTTPException(status_code=400, detail="Cédula inválida")
+
+    p = db.query(Patient).filter(Patient.cedula == ced).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Paciente no encontrado")
+
+    return {
+        "id": p.id,
+        "cedula": p.cedula,
+        "full_name": p.full_name,
+        "phone": p.phone,
         "qr_code": p.qr_code,
         "total_sessions": p.total_sessions,
         "completed_sessions": p.completed_sessions,
@@ -59,7 +89,9 @@ def get_patient_by_qr(qr_code: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Paciente no encontrado")
     return {
         "id": p.id,
+        "cedula": p.cedula,
         "full_name": p.full_name,
+        "phone": p.phone,
         "qr_code": p.qr_code,
         "total_sessions": p.total_sessions,
         "completed_sessions": p.completed_sessions,
@@ -73,10 +105,16 @@ def create_patient(payload: dict, db: Session = Depends(get_db)):
     if not full_name:
         raise HTTPException(status_code=400, detail="full_name es requerido")
 
-    # ✅ Si no envían qr_code, lo generamos
+    cedula = _clean_cedula(payload.get("cedula") or "")
+    if cedula:
+        exists_c = db.query(Patient).filter(Patient.cedula == cedula).first()
+        if exists_c:
+            raise HTTPException(status_code=400, detail="cedula ya existe")
+
+    phone = (payload.get("phone") or "").strip() or None
+
     qr_code = (payload.get("qr_code") or "").strip() or _generate_qr_code(db)
 
-    # ✅ Defaults seguros (evita 500 por NOT NULL)
     total_sessions = payload.get("total_sessions")
     completed_sessions = payload.get("completed_sessions")
     status = (payload.get("status") or "").strip()
@@ -88,13 +126,14 @@ def create_patient(payload: dict, db: Session = Depends(get_db)):
     if not status:
         status = "Activo"
 
-    # ✅ Evitar duplicados de QR
     existing_qr = db.query(Patient).filter(Patient.qr_code == qr_code).first()
     if existing_qr:
         raise HTTPException(status_code=400, detail="qr_code ya existe, usa otro o deja vacío")
 
     patient = Patient(
+        cedula=cedula or None,
         full_name=full_name,
+        phone=phone,
         qr_code=qr_code,
         total_sessions=int(total_sessions),
         completed_sessions=int(completed_sessions),
@@ -107,7 +146,9 @@ def create_patient(payload: dict, db: Session = Depends(get_db)):
 
     return {
         "id": patient.id,
+        "cedula": patient.cedula,
         "full_name": patient.full_name,
+        "phone": patient.phone,
         "qr_code": patient.qr_code,
         "total_sessions": patient.total_sessions,
         "completed_sessions": patient.completed_sessions,
@@ -121,11 +162,24 @@ def update_patient(patient_id: int, payload: dict, db: Session = Depends(get_db)
     if not p:
         raise HTTPException(status_code=404, detail="Paciente no encontrado")
 
-    # Campos permitidos
     if "full_name" in payload and payload["full_name"] is not None:
         name = str(payload["full_name"]).strip()
         if name:
             p.full_name = name
+
+    if "cedula" in payload and payload["cedula"] is not None:
+        ced = _clean_cedula(str(payload["cedula"]))
+        if ced:
+            exists = db.query(Patient).filter(Patient.cedula == ced, Patient.id != patient_id).first()
+            if exists:
+                raise HTTPException(status_code=400, detail="cedula ya existe")
+            p.cedula = ced
+        else:
+            p.cedula = None
+
+    if "phone" in payload and payload["phone"] is not None:
+        ph = str(payload["phone"]).strip()
+        p.phone = ph or None
 
     if "qr_code" in payload and payload["qr_code"] is not None:
         new_qr = str(payload["qr_code"]).strip()
@@ -151,7 +205,9 @@ def update_patient(patient_id: int, payload: dict, db: Session = Depends(get_db)
 
     return {
         "id": p.id,
+        "cedula": p.cedula,
         "full_name": p.full_name,
+        "phone": p.phone,
         "qr_code": p.qr_code,
         "total_sessions": p.total_sessions,
         "completed_sessions": p.completed_sessions,

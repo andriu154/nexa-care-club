@@ -20,7 +20,6 @@ class Doctor(Base):
     password_hash = Column(String, nullable=True)
 
     # ✅ IMPORTANTE: tu DB en Render exige doctors.pin NOT NULL
-    # Lo agregamos para que SQLAlchemy pueda insertar sin error.
     pin = Column(String, nullable=False, default="0000")
 
     encounters = relationship("Encounter", back_populates="doctor")
@@ -34,7 +33,14 @@ class Patient(Base):
     __tablename__ = "patients"
 
     id = Column(Integer, primary_key=True, index=True)
+
+    # ✅ NUEVO: Cédula (búsqueda/autollenado)
+    cedula = Column(String, unique=True, index=True, nullable=True)
+
     full_name = Column(String, nullable=False)
+
+    # ✅ NUEVO: teléfono opcional
+    phone = Column(String, nullable=True)
 
     qr_code = Column(String, unique=True, index=True, nullable=True)
 
@@ -68,7 +74,6 @@ class Appointment(Base):
     reason = Column(String, nullable=True)
     notes = Column(Text, nullable=True)
 
-    # 🔗 vínculo con atención
     encounter_id = Column(
         Integer,
         ForeignKey("encounters.id"),
@@ -82,7 +87,6 @@ class Appointment(Base):
     doctor = relationship("Doctor", back_populates="appointments")
     patient = relationship("Patient", back_populates="appointments")
 
-    # ✅ RELACIÓN BIDIRECCIONAL (PRO)
     encounter = relationship(
         "Encounter",
         back_populates="appointment",
@@ -121,7 +125,6 @@ class Encounter(Base):
         back_populates="encounter"
     )
 
-    # ✅ volver a la cita que originó la atención
     appointment = relationship(
         "Appointment",
         back_populates="encounter",
