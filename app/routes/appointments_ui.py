@@ -1,10 +1,11 @@
 from datetime import datetime, timedelta
+import secrets
+
 from fastapi import APIRouter, Depends, Request, HTTPException, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from starlette.status import HTTP_303_SEE_OTHER
-import secrets
 
 from ..database import get_db
 from ..models import Appointment, Patient, Encounter
@@ -49,7 +50,13 @@ def _generate_qr_code(db: Session) -> str:
             return code
 
 
-def _overlaps(db: Session, doctor_id: int, start_at: datetime, end_at: datetime, exclude_id: int | None = None) -> bool:
+def _overlaps(
+    db: Session,
+    doctor_id: int,
+    start_at: datetime,
+    end_at: datetime,
+    exclude_id: int | None = None,
+) -> bool:
     q = (
         db.query(Appointment)
         .filter(Appointment.doctor_id == doctor_id)
@@ -69,6 +76,9 @@ def _can_start_now(appt: Appointment) -> bool:
     return start_window <= now <= end_window
 
 
+# =========================
+# FORM: NUEVA CITA (con búsqueda por cédula)
+# =========================
 @router.get("/app/appointments/new", response_class=HTMLResponse)
 def new_appointment_form(
     request: Request,
@@ -102,6 +112,9 @@ def new_appointment_form(
     )
 
 
+# =========================
+# QUICK CREATE PACIENTE DESDE FORM (si no existe por cédula)
+# =========================
 @router.post("/app/patients/quick-create")
 def quick_create_patient(
     request: Request,
@@ -132,17 +145,15 @@ def quick_create_patient(
             status_code=HTTP_303_SEE_OTHER,
         )
 
-    qr_code = _generate_qr_code(db)
-
     p = Patient(
         cedula=ced,
         full_name=name,
         phone=(phone or "").strip() or None,
-        qr_code=qr_code,
+        qr_code=_generate_qr_code(db),
         total_sessions=0,
         completed_sessions=0,
         status="Activo",
-        created_at=datetime.utcnow(),  # ✅ FIX NOT NULL patients.created_at
+        created_at=datetime.utcnow(),  # ✅ evita NOT NULL patients.created_at
         updated_at=datetime.utcnow(),
     )
     db.add(p)
@@ -154,6 +165,9 @@ def quick_create_patient(
     )
 
 
+# =========================
+# CREAR CITA
+# =========================
 @router.post("/app/appointments/new")
 def create_appointment(
     request: Request,
@@ -179,15 +193,16 @@ def create_appointment(
     except Exception:
         raise HTTPException(status_code=400, detail="Hora inválida")
 
-    p = db.query(Patient).filter(Patient.id == patient_id).first()
-    if not p:
-        raise HTTPException(status_code=400, detail="Paciente inválido")
-
+    # 🔥 REGLA: NO permitir pasado (pero SÍ permitir hoy más tarde)
     if start_at < datetime.utcnow() - timedelta(minutes=1):
         raise HTTPException(status_code=400, detail="No puedes agendar una cita en el pasado.")
 
     if duration_min < 10 or duration_min > 240:
         raise HTTPException(status_code=400, detail="Duración inválida (10–240 min)")
+
+    patient = db.query(Patient).filter(Patient.id == patient_id).first()
+    if not patient:
+        raise HTTPException(status_code=400, detail="Paciente inválido")
 
     end_at = start_at + timedelta(minutes=duration_min)
 
@@ -211,7 +226,88 @@ def create_appointment(
 
 
 # =========================
-# ✅ INICIAR ATENCIÓN DESDE CITA
+# CANCELAR CITA
+# =========================
+@router.post("/app/appointments/{appointment_id}/cancel")
+def cancel_appointment(
+    appointment_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    date: str | None = None,
+):
+    current_doctor = _require_login(request, db)
+    if not current_doctor:
+        return _redirect_login()
+
+    appt = db.query(Appointment).filter(Appointment.id == appointment_id).first()
+    if not appt:
+        raise HTTPException(status_code=404, detail="Cita no encontrada")
+
+    if appt.doctor_id != current_doctor.id:
+        raise HTTPException(status_code=403, detail="No autorizado")
+
+    appt.status = "canceled"
+    appt.updated_at = datetime.utcnow()
+    db.commit()
+
+    d = _parse_date(date) or datetime.utcnow().date()
+    return RedirectResponse(url=f"/app?date={d.isoformat()}", status_code=HTTP_303_SEE_OTHER)
+
+
+# =========================
+# REAGENDAR CITA
+# =========================
+@router.post("/app/appointments/{appointment_id}/reschedule")
+def reschedule_appointment(
+    appointment_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    date: str = Form(...),
+    time: str = Form(...),
+    duration_min: int = Form(60),
+):
+    current_doctor = _require_login(request, db)
+    if not current_doctor:
+        return _redirect_login()
+
+    appt = db.query(Appointment).filter(Appointment.id == appointment_id).first()
+    if not appt:
+        raise HTTPException(status_code=404, detail="Cita no encontrada")
+
+    if appt.doctor_id != current_doctor.id:
+        raise HTTPException(status_code=403, detail="No autorizado")
+
+    d = _parse_date(date)
+    if d is None:
+        raise HTTPException(status_code=400, detail="Fecha inválida")
+
+    try:
+        hh, mm = time.split(":")
+        start_at = datetime(d.year, d.month, d.day, int(hh), int(mm))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Hora inválida")
+
+    if start_at < datetime.utcnow() - timedelta(minutes=1):
+        raise HTTPException(status_code=400, detail="No puedes reagendar una cita al pasado")
+
+    if duration_min < 10 or duration_min > 240:
+        raise HTTPException(status_code=400, detail="Duración inválida (10–240 min)")
+
+    end_at = start_at + timedelta(minutes=duration_min)
+
+    if _overlaps(db, current_doctor.id, start_at, end_at, exclude_id=appt.id):
+        raise HTTPException(status_code=400, detail="Ese horario ya está ocupado")
+
+    appt.start_at = start_at
+    appt.end_at = end_at
+    appt.updated_at = datetime.utcnow()
+    db.commit()
+
+    return RedirectResponse(url=f"/app?date={d.isoformat()}", status_code=HTTP_303_SEE_OTHER)
+
+
+# =========================
+# INICIAR ATENCIÓN DESDE CITA
 # =========================
 @router.post("/app/appointments/{appointment_id}/start")
 def start_encounter_from_appointment(
@@ -268,3 +364,48 @@ def start_encounter_from_appointment(
     db.commit()
 
     return RedirectResponse(url=f"/app/encounters/{enc.id}", status_code=HTTP_303_SEE_OTHER)
+
+
+# =========================
+# NO ASISTE (motivo obligatorio)
+# =========================
+@router.post("/app/appointments/{appointment_id}/no-show")
+def mark_no_show(
+    appointment_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    date: str | None = None,
+    reason_no_show: str = Form(...),
+):
+    current_doctor = _require_login(request, db)
+    if not current_doctor:
+        return _redirect_login()
+
+    appt = db.query(Appointment).filter(Appointment.id == appointment_id).first()
+    if not appt:
+        raise HTTPException(status_code=404, detail="Cita no encontrada")
+
+    if appt.doctor_id != current_doctor.id:
+        raise HTTPException(status_code=403, detail="No autorizado")
+
+    if appt.status == "completed":
+        raise HTTPException(status_code=400, detail="La cita ya fue atendida")
+
+    motivo = (reason_no_show or "").strip()
+    if not motivo:
+        raise HTTPException(status_code=400, detail="El motivo es obligatorio")
+
+    appt.status = "no_show"
+    appt.updated_at = datetime.utcnow()
+
+    stamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    entry = f"[{stamp}] NO_SHOW: {motivo}"
+    if appt.notes and appt.notes.strip():
+        appt.notes = appt.notes.rstrip() + "\n" + entry
+    else:
+        appt.notes = entry
+
+    db.commit()
+
+    d = _parse_date(date) or datetime.utcnow().date()
+    return RedirectResponse(url=f"/app?date={d.isoformat()}", status_code=HTTP_303_SEE_OTHER)
