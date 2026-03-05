@@ -10,6 +10,8 @@ from ..models import Appointment, Patient, Encounter
 from .auth import get_logged_doctor
 
 router = APIRouter(tags=["Appointments UI"])
+
+# ✅ en Render y local, tus templates están aquí:
 templates = Jinja2Templates(directory="app/templates")
 
 
@@ -60,15 +62,20 @@ def _can_start_now(appt: Appointment) -> bool:
 
 
 @router.get("/app/appointments/new", response_class=HTMLResponse)
-def new_appointment_form(request: Request, db: Session = Depends(get_db), date: str | None = None):
+def new_appointment_form(
+    request: Request,
+    db: Session = Depends(get_db),
+    date: str | None = None
+):
     current_doctor = _require_login(request, db)
     if not current_doctor:
         return _redirect_login()
 
-    d = _parse_date(date)
-    if d is None:
-        d = datetime.utcnow().date()
+    d = _parse_date(date) or datetime.utcnow().date()
 
+    # ✅ si tu modelo Patient no tiene full_name, esto tronaría.
+    # Como ya te funciona patients.html/patient_detail, asumo que sí existe.
+    # Si no existe, dime y lo ajusto al campo correcto (name, first_name, etc.).
     patients = db.query(Patient).order_by(Patient.full_name.asc()).all()
 
     return templates.TemplateResponse(
@@ -79,6 +86,10 @@ def new_appointment_form(request: Request, db: Session = Depends(get_db), date: 
             "patients": patients,
             "date": d,
             "error": None,
+            "time": "",
+            "duration_min": 60,
+            "reason": "",
+            "notes": "",
         },
     )
 
@@ -108,6 +119,26 @@ def create_appointment(
     except Exception:
         raise HTTPException(status_code=400, detail="Hora inválida")
 
+    # ✅ validar paciente existe (evita FK errors silenciosos)
+    p = db.query(Patient).filter(Patient.id == patient_id).first()
+    if not p:
+        patients = db.query(Patient).order_by(Patient.full_name.asc()).all()
+        return templates.TemplateResponse(
+            "appointment_new.html",
+            {
+                "request": request,
+                "current_doctor": current_doctor,
+                "patients": patients,
+                "date": d,
+                "time": time,
+                "duration_min": duration_min,
+                "reason": reason,
+                "notes": notes,
+                "error": "Paciente inválido. Selecciona un paciente.",
+            },
+            status_code=400,
+        )
+
     if start_at < datetime.utcnow() - timedelta(minutes=1):
         patients = db.query(Patient).order_by(Patient.full_name.asc()).all()
         return templates.TemplateResponse(
@@ -117,6 +148,10 @@ def create_appointment(
                 "current_doctor": current_doctor,
                 "patients": patients,
                 "date": d,
+                "time": time,
+                "duration_min": duration_min,
+                "reason": reason,
+                "notes": notes,
                 "error": "No puedes agendar una cita en el pasado.",
             },
             status_code=400,
@@ -136,6 +171,10 @@ def create_appointment(
                 "current_doctor": current_doctor,
                 "patients": patients,
                 "date": d,
+                "time": time,
+                "duration_min": duration_min,
+                "reason": reason,
+                "notes": notes,
                 "error": "Ese horario ya está ocupado. Elige otra hora.",
             },
             status_code=400,
@@ -158,7 +197,12 @@ def create_appointment(
 
 
 @router.post("/app/appointments/{appointment_id}/cancel")
-def cancel_appointment(appointment_id: int, request: Request, db: Session = Depends(get_db), date: str | None = None):
+def cancel_appointment(
+    appointment_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    date: str | None = None
+):
     current_doctor = _require_login(request, db)
     if not current_doctor:
         return _redirect_login()
@@ -227,9 +271,6 @@ def reschedule_appointment(
     return RedirectResponse(url=f"/app?date={d.isoformat()}", status_code=HTTP_303_SEE_OTHER)
 
 
-# =========================
-# ✅ INICIAR ATENCIÓN DESDE CITA
-# =========================
 @router.post("/app/appointments/{appointment_id}/start")
 def start_encounter_from_appointment(
     appointment_id: int,
@@ -255,23 +296,19 @@ def start_encounter_from_appointment(
         raise HTTPException(status_code=400, detail="La cita está marcada como No asiste")
 
     if appt.status == "completed":
-        # si ya está atendida pero tiene encounter, abrirlo
         if appt.encounter_id:
             return RedirectResponse(url=f"/app/encounters/{appt.encounter_id}", status_code=HTTP_303_SEE_OTHER)
         raise HTTPException(status_code=400, detail="La cita ya fue atendida")
 
-    # Si ya existe encounter, ir directo
     if appt.encounter_id:
         return RedirectResponse(url=f"/app/encounters/{appt.encounter_id}", status_code=HTTP_303_SEE_OTHER)
 
-    # ⏱️ validar ventana de inicio
     if not _can_start_now(appt):
         raise HTTPException(
             status_code=400,
             detail="Aún no estás dentro de la ventana de atención (15 min antes hasta 30 min después)."
         )
 
-    # Crear encounter y vincularlo
     enc = Encounter(
         patient_id=appt.patient_id,
         doctor_id=current_doctor.id,
@@ -292,9 +329,6 @@ def start_encounter_from_appointment(
     return RedirectResponse(url=f"/app/encounters/{enc.id}", status_code=HTTP_303_SEE_OTHER)
 
 
-# =========================
-# ✅ NO ASISTE (CON MOTIVO OBLIGATORIO)
-# =========================
 @router.post("/app/appointments/{appointment_id}/no-show")
 def mark_no_show(
     appointment_id: int,
@@ -324,7 +358,6 @@ def mark_no_show(
     appt.status = "no_show"
     appt.updated_at = datetime.utcnow()
 
-    # Guardar motivo en notes (sin migraciones)
     stamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
     entry = f"[{stamp}] NO_SHOW: {motivo}"
     if appt.notes and appt.notes.strip():

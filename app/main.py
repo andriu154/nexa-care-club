@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 import os
+from pathlib import Path
 
 from sqlalchemy import text
 from passlib.context import CryptContext
@@ -23,17 +24,33 @@ from .routes.history import router as history_router
 from .routes.appointments_ui import router as appointments_ui_router
 
 
+# ===== Paths robustos (funciona igual en Render y local) =====
+BASE_DIR = Path(__file__).resolve().parent          # .../app
+TEMPLATES_DIR = BASE_DIR / "templates"             # .../app/templates
+STATIC_DIR = BASE_DIR / "static"                   # .../app/static
+
+
 app = FastAPI(title="NexaCenter")
 
-# 🔐 Middleware de sesión (LOGIN UI)
+# ===== Sesiones (Login UI) =====
+# En Render debes usar HTTPS (https_only=True).
+# En local normalmente NO (https_only=False) para no romper cookies.
+ENV = (os.getenv("ENV") or os.getenv("RENDER") or "").lower()
+IS_PROD = ENV in ("production", "prod", "true", "1") or os.getenv("RENDER") is not None
+
+SESSION_SECRET = os.getenv("SESSION_SECRET", "dev-secret-change-me")
+if SESSION_SECRET == "dev-secret-change-me" and IS_PROD:
+    # No rompe el deploy, pero te avisa en logs
+    print("⚠️ SESSION_SECRET está en default. Configúralo en Render Environment Variables.")
+
 app.add_middleware(
     SessionMiddleware,
-    secret_key=os.getenv("SESSION_SECRET", "dev-secret-change-me"),
+    secret_key=SESSION_SECRET,
     same_site="lax",
-    https_only=True,
+    https_only=IS_PROD,  # ✅ en producción True, en local False
 )
 
-# ✅ hash de contraseñas
+# ===== Hash de contraseñas =====
 pwd_context = CryptContext(
     schemes=["pbkdf2_sha256", "bcrypt"],
     deprecated="auto",
@@ -70,9 +87,10 @@ def ensure_sqlite_schema():
                 conn.execute(text("ALTER TABLE doctors ADD COLUMN password_hash VARCHAR;"))
                 print("✅ Migración: doctors.password_hash agregado")
 
-            # ✅ NUEVO: columna pin (si no existe)
             if "pin" not in col_names:
-                conn.execute(text("ALTER TABLE doctors ADD COLUMN pin VARCHAR NOT NULL DEFAULT '0000';"))
+                conn.execute(
+                    text("ALTER TABLE doctors ADD COLUMN pin VARCHAR NOT NULL DEFAULT '0000';")
+                )
                 print("✅ Migración: doctors.pin agregado")
 
     except Exception as e:
@@ -108,7 +126,6 @@ def seed_default_doctors_if_enabled():
     db = SessionLocal()
     try:
         for reg, plain_pass, name in pairs:
-
             existing = db.query(Doctor).filter(Doctor.registration == reg).first()
             if existing:
                 print(f"ℹ️ Doctor ya existe (registration={reg}). No se modifica.")
@@ -121,32 +138,29 @@ def seed_default_doctors_if_enabled():
                 registration=reg,
                 specialty=None,
                 password_hash=hashed,
-                pin="0000",  # ✅ necesario para DB de Render
+                pin="0000",
             )
-
             db.add(d)
             db.commit()
-
             print(f"✅ Doctor creado: {name} (registration={reg})")
 
     except Exception as e:
         db.rollback()
         print("⚠️ Error creando doctores seed:", repr(e))
-
     finally:
         db.close()
 
 
-# 1️⃣ crear tablas
+# ===== 1) Crear tablas =====
 Base.metadata.create_all(bind=engine)
 
-# 2️⃣ migraciones SQLite
+# ===== 2) Migraciones SQLite =====
 ensure_sqlite_schema()
 
-# 3️⃣ seed doctores
+# ===== 3) Seed doctores =====
 seed_default_doctors_if_enabled()
 
-# 4️⃣ rutas
+# ===== 4) Rutas =====
 app.include_router(auth_router)
 app.include_router(doctors_router)
 app.include_router(patients_router)
@@ -162,8 +176,12 @@ app.include_router(clinical_notes_router)
 app.include_router(pdf_router)
 app.include_router(history_router)
 
-# 5️⃣ archivos estáticos
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+# ===== 5) Archivos estáticos =====
+# Si no existe, no rompas el arranque en producción:
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+else:
+    print(f"⚠️ STATIC_DIR no existe: {STATIC_DIR}")
 
 
 @app.get("/")

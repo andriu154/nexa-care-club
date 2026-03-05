@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container" style="max-width: 900px; margin: 0 auto; padding: 16px;">
+  <h2>Nueva cita</h2>
+
+  <p style="opacity:.8; margin-top:6px;">
+    Doctor: <b>{{ current_doctor.name }}</b>
+  </p>
+
+  {% if error %}
+    <div style="padding: 12px; margin: 12px 0; border: 1px solid #f5c2c7; background:#f8d7da; color:#842029; border-radius: 8px;">
+      {{ error }}
+    </div>
+  {% endif %}
+
+  <form method="post" action="/app/appointments/new" style="display:grid; gap:12px; margin-top: 12px;">
+
+    <div>
+      <label for="date"><b>Fecha</b></label><br/>
+      <input id="date" name="date" type="date" value="{{ date }}" required />
+    </div>
+
+    <div>
+      <label for="time"><b>Hora</b></label><br/>
+      <input id="time" name="time" type="time" value="{{ time or '' }}" required />
+    </div>
+
+    <div>
+      <label for="duration_min"><b>Duración (min)</b></label><br/>
+      <input id="duration_min" name="duration_min" type="number" min="10" max="240" value="{{ duration_min or 60 }}" required />
+    </div>
+
+    <div>
+      <label for="patient_id"><b>Paciente</b></label><br/>
+      <select id="patient_id" name="patient_id" required>
+        <option value="">Selecciona un paciente</option>
+        {% for p in patients or [] %}
+          <option value="{{ p.id }}">
+            {{ p.full_name if p.full_name else ("Paciente #" ~ p.id) }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div>
+      <label for="reason"><b>Motivo</b></label><br/>
+      <input id="reason" name="reason" type="text" maxlength="120" value="{{ reason or '' }}" placeholder="Opcional" />
+    </div>
+
+    <div>
+      <label for="notes"><b>Notas</b></label><br/>
+      <textarea id="notes" name="notes" rows="4" placeholder="Opcional">{{ notes or "" }}</textarea>
+    </div>
+
+    <div style="display:flex; gap:10px; align-items:center;">
+      <button type="submit">Guardar cita</button>
+      <a href="/app?date={{ date }}" style="text-decoration:none;">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
