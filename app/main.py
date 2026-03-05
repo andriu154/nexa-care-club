@@ -42,19 +42,18 @@ pwd_context = CryptContext(
 
 def ensure_schema():
     """
-    Agrega columnas faltantes en SQLite o Postgres.
-    Esto evita 500 cuando actualizamos modelos sin migraciones formales.
+    Migraciones simples para SQLite (Render) y otros motores.
+    Agrega columnas faltantes para evitar 500.
     """
     try:
         dialect = engine.dialect.name  # 'sqlite', 'postgresql', etc.
         print(f"ℹ️ DB dialect detectado: {dialect}")
 
         with engine.begin() as conn:
-            # =========================
-            # SQLITE
-            # =========================
             if dialect == "sqlite":
-                # ---- doctors
+                # -------------------------
+                # doctors
+                # -------------------------
                 tbl = conn.execute(
                     text("SELECT name FROM sqlite_master WHERE type='table' AND name='doctors';")
                 ).fetchone()
@@ -79,7 +78,9 @@ def ensure_schema():
                         conn.execute(text("ALTER TABLE doctors ADD COLUMN pin VARCHAR NOT NULL DEFAULT '0000';"))
                         print("✅ Migración: doctors.pin agregado")
 
-                # ---- patients
+                # -------------------------
+                # patients
+                # -------------------------
                 tbl_pat = conn.execute(
                     text("SELECT name FROM sqlite_master WHERE type='table' AND name='patients';")
                 ).fetchone()
@@ -96,6 +97,18 @@ def ensure_schema():
                         conn.execute(text("ALTER TABLE patients ADD COLUMN phone VARCHAR;"))
                         print("✅ Migración: patients.phone agregado")
 
+                    # ✅ FIX: timestamps requeridos/esperados por el modelo
+                    if "created_at" not in p_col_names:
+                        conn.execute(text("ALTER TABLE patients ADD COLUMN created_at DATETIME;"))
+                        print("✅ Migración: patients.created_at agregado")
+
+                    if "updated_at" not in p_col_names:
+                        conn.execute(text("ALTER TABLE patients ADD COLUMN updated_at DATETIME;"))
+                        print("✅ Migración: patients.updated_at agregado")
+
+                    # Backfill de created_at si quedó NULL (para evitar NOT NULL en inserts/lecturas)
+                    conn.execute(text("UPDATE patients SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP);"))
+
                     # índices
                     conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ux_patients_cedula ON patients(cedula);"))
                     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_patients_cedula ON patients(cedula);"))
@@ -103,22 +116,22 @@ def ensure_schema():
                 return
 
             # =========================
-            # POSTGRES / OTROS (usamos IF NOT EXISTS)
+            # POSTGRES / OTROS
             # =========================
-            # doctors
             conn.execute(text("ALTER TABLE doctors ADD COLUMN IF NOT EXISTS specialty VARCHAR;"))
             conn.execute(text("ALTER TABLE doctors ADD COLUMN IF NOT EXISTS registration VARCHAR;"))
             conn.execute(text("ALTER TABLE doctors ADD COLUMN IF NOT EXISTS password_hash VARCHAR;"))
             conn.execute(text("ALTER TABLE doctors ADD COLUMN IF NOT EXISTS pin VARCHAR NOT NULL DEFAULT '0000';"))
 
-            # patients
             conn.execute(text("ALTER TABLE patients ADD COLUMN IF NOT EXISTS cedula VARCHAR;"))
             conn.execute(text("ALTER TABLE patients ADD COLUMN IF NOT EXISTS phone VARCHAR;"))
+            conn.execute(text("ALTER TABLE patients ADD COLUMN IF NOT EXISTS created_at TIMESTAMP;"))
+            conn.execute(text("ALTER TABLE patients ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP;"))
 
             conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ux_patients_cedula ON patients(cedula);"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_patients_cedula ON patients(cedula);"))
 
-            print("✅ Migración: esquema actualizado (modo Postgres/otros)")
+            print("✅ Migración: esquema actualizado (Postgres/otros)")
 
     except Exception as e:
         print("⚠️ Error en migración de esquema:", repr(e))
