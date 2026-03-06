@@ -1,86 +1,154 @@
 {% extends "base.html" %}
+
+{% block title %}
+  Nueva cita
+{% endblock %}
+
+{% block actions %}
+  <a class="btn btn-ghost" href="/app?date={{ date }}">Volver a agenda</a>
+{% endblock %}
+
 {% block content %}
-<div class="container" style="max-width: 900px; margin: 0 auto; padding: 16px;">
-  <h2>Nueva cita</h2>
-  <p style="opacity:.8; margin-top:6px;">Doctor: <b>{{ current_doctor.name }}</b></p>
+<div class="page-wrap">
+  <div class="page-card">
+    <div class="appt-modal-shell">
+      <div class="appt-modal-top">
+        <div>
+          <div class="appt-title">Nueva cita</div>
+          <div class="appt-subtitle">
+            Doctor: <strong>{{ current_doctor.name }}</strong>
+          </div>
+        </div>
 
-  <!-- Buscar por cédula -->
-  <form method="get" action="/app/appointments/new" style="display:flex; gap:10px; align-items:end; margin-top: 12px;">
-    <input type="hidden" name="date" value="{{ date }}" />
-    <div>
-      <label for="cedula"><b>Cédula</b></label><br/>
-      <input id="cedula" name="cedula" type="text" value="{{ cedula or '' }}" placeholder="Ej: 0102030405" />
-    </div>
-    <button type="submit">Buscar</button>
-  </form>
-
-  <hr style="margin: 16px 0;" />
-
-  {% if patient_found %}
-    <div style="padding: 12px; border: 1px solid #cfe2ff; background:#e7f1ff; border-radius: 8px;">
-      <b>Paciente:</b> {{ patient_found.full_name }}<br/>
-      <small style="opacity:.8;">Cédula: {{ patient_found.cedula }}</small>
-    </div>
-
-    <form method="post" action="/app/appointments/new" style="display:grid; gap:12px; margin-top: 12px;">
-      <input type="hidden" name="date" value="{{ date }}" />
-      <input type="hidden" name="patient_id" value="{{ patient_found.id }}" />
-
-      <div>
-        <label for="time"><b>Hora</b></label><br/>
-        <input id="time" name="time" type="time" value="{{ time or '' }}" required />
+        <div class="appt-date-chip">
+          Fecha: {{ date }}
+        </div>
       </div>
 
-      <div>
-        <label for="duration_min"><b>Duración (min)</b></label><br/>
-        <input id="duration_min" name="duration_min" type="number" min="10" max="240" value="{{ duration_min or 60 }}" required />
+      <div class="appt-panel">
+        <div class="appt-panel-header">
+          <div class="appt-panel-title">1. Buscar paciente</div>
+          <div class="appt-panel-help">Busca por cédula para agendar más rápido</div>
+        </div>
+
+        <form method="get" action="/app/appointments/new" class="appt-form">
+          <input type="hidden" name="date" value="{{ date }}" />
+
+          <div class="appt-field">
+            <label class="appt-label">Cédula</label>
+            <input
+              class="input appt-input"
+              name="cedula"
+              type="text"
+              value="{{ cedula or '' }}"
+              placeholder="Ej: 0102030405"
+            />
+            <div class="appt-help">Escribe la cédula y presiona Buscar.</div>
+          </div>
+
+          <div class="appt-actions">
+            <button class="btn btn-primary appt-btn-lg" type="submit">Buscar paciente</button>
+            <a class="btn btn-ghost appt-btn-lg" href="/app?date={{ date }}">Salir</a>
+          </div>
+        </form>
       </div>
 
-      <div>
-        <label for="reason"><b>Motivo</b></label><br/>
-        <input id="reason" name="reason" type="text" maxlength="120" value="{{ reason or '' }}" placeholder="Opcional" />
-      </div>
+      {% if patient_found %}
+        <div class="appt-panel appt-panel-success">
+          <div class="appt-panel-header">
+            <div class="appt-panel-title">2. Paciente encontrado</div>
+            <div class="appt-panel-help">Ya puedes crear la cita</div>
+          </div>
 
-      <div>
-        <label for="notes"><b>Notas</b></label><br/>
-        <textarea id="notes" name="notes" rows="4" placeholder="Opcional">{{ notes or "" }}</textarea>
-      </div>
+          <div class="appt-patient-box">
+            <div class="appt-patient-name">{{ patient_found.full_name }}</div>
+            <div class="appt-patient-meta">Cédula: {{ patient_found.cedula }}</div>
+          </div>
 
-      <div style="display:flex; gap:10px; align-items:center;">
-        <button type="submit">Guardar cita</button>
-        <a href="/app?date={{ date }}" style="text-decoration:none;">Cancelar</a>
-      </div>
-    </form>
+          <form method="post" action="/app/appointments/new" class="appt-form appt-form-spaced">
+            <input type="hidden" name="date" value="{{ date }}" />
+            <input type="hidden" name="patient_id" value="{{ patient_found.id }}" />
 
-  {% else %}
-    <p style="opacity:.85;">
-      {% if cedula %}
-        No existe paciente con esa cédula. Regístralo aquí:
+            <div class="appt-grid-2">
+              <div class="appt-field">
+                <label class="appt-label">Hora</label>
+                <input class="input appt-input" name="time" type="time" value="{{ time or '' }}" required />
+              </div>
+
+              <div class="appt-field">
+                <label class="appt-label">Duración (min)</label>
+                <input class="input appt-input" name="duration_min" type="number" min="10" max="240" value="{{ duration_min or 60 }}" required />
+              </div>
+            </div>
+
+            <div class="appt-field">
+              <label class="appt-label">Motivo</label>
+              <input
+                class="input appt-input"
+                name="reason"
+                type="text"
+                maxlength="120"
+                value="{{ reason or '' }}"
+                placeholder="Ej: Control, dolor abdominal, chequeo..."
+              />
+            </div>
+
+            <div class="appt-field">
+              <label class="appt-label">Notas</label>
+              <textarea
+                class="textarea appt-textarea"
+                name="notes"
+                rows="5"
+                placeholder="Escribe aquí información adicional si la necesitas"
+              >{{ notes or "" }}</textarea>
+            </div>
+
+            <div class="appt-actions">
+              <button class="btn btn-primary appt-btn-lg" type="submit">Guardar cita</button>
+              <a class="btn btn-ghost appt-btn-lg" href="/app?date={{ date }}">Cancelar</a>
+            </div>
+          </form>
+        </div>
+
       {% else %}
-        Escribe una cédula y presiona Buscar. Si no existe, podrás registrarlo aquí.
+        <div class="appt-panel">
+          <div class="appt-panel-header">
+            <div class="appt-panel-title">2. Registrar paciente</div>
+            <div class="appt-panel-help">
+              {% if cedula %}
+                No existe paciente con esa cédula. Puedes registrarlo aquí.
+              {% else %}
+                Si el paciente no existe, regístralo aquí primero.
+              {% endif %}
+            </div>
+          </div>
+
+          <form method="post" action="/app/patients/quick-create" class="appt-form appt-form-spaced">
+            <input type="hidden" name="date" value="{{ date }}" />
+
+            <div class="appt-field">
+              <label class="appt-label">Cédula</label>
+              <input class="input appt-input" name="cedula" type="text" value="{{ cedula or '' }}" required />
+            </div>
+
+            <div class="appt-field">
+              <label class="appt-label">Nombres completos</label>
+              <input class="input appt-input" name="full_name" type="text" required />
+            </div>
+
+            <div class="appt-field">
+              <label class="appt-label">Teléfono (opcional)</label>
+              <input class="input appt-input" name="phone" type="text" />
+            </div>
+
+            <div class="appt-actions">
+              <button class="btn btn-primary appt-btn-lg" type="submit">Registrar paciente</button>
+              <a class="btn btn-ghost appt-btn-lg" href="/app?date={{ date }}">Cancelar</a>
+            </div>
+          </form>
+        </div>
       {% endif %}
-    </p>
-
-    <form method="post" action="/app/patients/quick-create" style="display:grid; gap:12px; margin-top: 12px;">
-      <input type="hidden" name="date" value="{{ date }}" />
-
-      <div>
-        <label for="cedula_create"><b>Cédula</b></label><br/>
-        <input id="cedula_create" name="cedula" type="text" value="{{ cedula or '' }}" required />
-      </div>
-
-      <div>
-        <label for="full_name"><b>Nombres completos</b></label><br/>
-        <input id="full_name" name="full_name" type="text" required />
-      </div>
-
-      <div>
-        <label for="phone"><b>Teléfono</b> (opcional)</label><br/>
-        <input id="phone" name="phone" type="text" />
-      </div>
-
-      <button type="submit">Registrar paciente</button>
-    </form>
-  {% endif %}
+    </div>
+  </div>
 </div>
 {% endblock %}

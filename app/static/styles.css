@@ -81,8 +81,7 @@ a{ color: inherit; }
   width: 48px;
   height: 48px;
   border-radius: 16px;
-  background:
-    radial-gradient(circle at 30% 30%, #ffffff, #dcdfe3);
+  background: radial-gradient(circle at 30% 30%, #ffffff, #dcdfe3);
   border: 1px solid #d9dde2;
   box-shadow: inset 0 1px 0 rgba(255,255,255,.9);
 }
@@ -216,6 +215,15 @@ a{ color: inherit; }
   padding: 2px;
 }
 
+.page-wrap{
+  display:flex;
+  justify-content:center;
+}
+
+.page-card{
+  width:min(980px, 100%);
+}
+
 /* =========================
    LAYOUT HELPERS
    ========================= */
@@ -245,7 +253,7 @@ a{ color: inherit; }
    CARDS
    ========================= */
 .card{
-  background: rgba(255,255,255,.92);
+  background: rgba(255,255,255,.95);
   border: 1px solid rgba(229,231,235,.95);
   border-radius: 22px;
   box-shadow: var(--shadow-md);
@@ -302,16 +310,17 @@ a{ color: inherit; }
   align-items:center;
   justify-content:center;
   gap:8px;
-  padding: 10px 14px;
+  padding: 12px 16px;
   border-radius: 14px;
   border: 1px solid var(--nc-border);
   text-decoration:none;
   cursor:pointer;
-  font-weight: 700;
+  font-weight: 800;
   background: #ffffff;
   color: var(--nc-primary);
   transition: all .16s ease;
   box-shadow: 0 6px 14px rgba(0,0,0,.04);
+  min-height: 46px;
 }
 
 .btn:hover{
@@ -330,14 +339,15 @@ a{ color: inherit; }
 }
 
 .btn-ghost{
-  background: rgba(255,255,255,.75);
+  background: rgba(255,255,255,.92);
 }
 
 .btn-sm{
-  padding: 7px 11px;
+  padding: 8px 12px;
   border-radius: 12px;
   font-size: 12px;
   font-weight: 800;
+  min-height: 38px;
 }
 
 .btn-success{
@@ -405,7 +415,7 @@ a{ color: inherit; }
 .input,
 .textarea{
   width:100%;
-  padding: 12px 14px;
+  padding: 14px 16px;
   border-radius: 16px;
   border: 1px solid #d9dde3;
   background: #ffffff;
@@ -417,10 +427,11 @@ a{ color: inherit; }
 
 .input{
   font-weight: 600;
+  min-height: 50px;
 }
 
 .textarea{
-  min-height: 110px;
+  min-height: 120px;
   resize: vertical;
 }
 
@@ -474,8 +485,8 @@ a{ color: inherit; }
 }
 
 .nc-modal-card{
-  width: min(820px, 95vw);
-  max-height: 88vh;
+  width: min(920px, 95vw);
+  max-height: 90vh;
   overflow: auto;
   background: #ffffff;
   border-radius: 24px;
@@ -488,8 +499,9 @@ a{ color: inherit; }
   align-items:center;
   justify-content:space-between;
   gap:12px;
-  padding: 16px 18px;
+  padding: 18px 20px;
   border-bottom: 1px solid var(--nc-border);
+  background: linear-gradient(180deg, #ffffff 0%, #fbfbfc 100%);
 }
 
 .nc-modal-title{
@@ -511,7 +523,7 @@ a{ color: inherit; }
 }
 
 .nc-modal-body{
-  padding: 18px;
+  padding: 22px;
 }
 
 .nc-spinner{
@@ -520,49 +532,144 @@ a{ color: inherit; }
   font-weight: 700;
 }
 
-.nc-form{
+/* =========================
+   NUEVA CITA
+   ========================= */
+.appt-modal-shell{
   display:grid;
-  gap:12px;
+  gap:18px;
 }
 
-.nc-form-row{
+.appt-modal-top{
   display:flex;
-  gap:10px;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
   flex-wrap:wrap;
-  align-items:end;
 }
 
-.nc-label{
+.appt-title{
+  font-size: 28px;
   font-weight: 800;
-  font-size: 13px;
-  margin-bottom: 6px;
+  letter-spacing: -.4px;
 }
 
-.nc-help{
+.appt-subtitle{
+  margin-top: 6px;
+  font-size: 14px;
+  color: var(--nc-muted);
+}
+
+.appt-date-chip{
+  display:inline-flex;
+  align-items:center;
+  padding: 12px 16px;
+  border-radius: 999px;
+  background: #f8fafc;
+  border: 1px solid var(--nc-border);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.appt-panel{
+  background: linear-gradient(180deg, #ffffff 0%, #fcfcfd 100%);
+  border: 1px solid var(--nc-border);
+  border-radius: 22px;
+  box-shadow: var(--shadow-sm);
+  padding: 20px;
+}
+
+.appt-panel-success{
+  border-color: #cfe8d6;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fffa 100%);
+}
+
+.appt-panel-header{
+  margin-bottom: 16px;
+}
+
+.appt-panel-title{
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -.2px;
+}
+
+.appt-panel-help{
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--nc-muted);
+}
+
+.appt-form{
+  display:grid;
+  gap:16px;
+}
+
+.appt-form-spaced{
+  margin-top: 14px;
+}
+
+.appt-grid-2{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:14px;
+}
+
+.appt-field{
+  display:grid;
+  gap:8px;
+}
+
+.appt-label{
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--nc-primary);
+}
+
+.appt-help{
   font-size: 12px;
   color: var(--nc-muted);
-  margin-top: 4px;
 }
 
-.nc-divider{
-  border: none;
-  border-top: 1px solid var(--nc-border);
-  margin: 14px 0;
+.appt-input{
+  font-size: 15px;
 }
 
-.nc-note{
-  padding: 14px;
-  border: 1px solid #dbeafe;
-  background: #eff6ff;
+.appt-textarea{
+  min-height: 130px;
+}
+
+.appt-actions{
+  display:flex;
+  gap:12px;
+  flex-wrap:wrap;
+  align-items:center;
+}
+
+.appt-btn-lg{
+  min-width: 180px;
+  min-height: 50px;
+  padding: 14px 18px;
   border-radius: 16px;
 }
 
-.nc-actions{
-  display:flex;
-  gap:10px;
-  align-items:center;
-  justify-content:flex-end;
-  flex-wrap:wrap;
+.appt-patient-box{
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+}
+
+.appt-patient-name{
+  font-size: 18px;
+  font-weight: 800;
+  color: #166534;
+}
+
+.appt-patient-meta{
+  margin-top: 4px;
+  font-size: 13px;
+  color: #166534;
 }
 
 /* =========================
@@ -590,5 +697,13 @@ a{ color: inherit; }
 
   .topbar-title{
     font-size: 18px;
+  }
+
+  .appt-grid-2{
+    grid-template-columns: 1fr;
+  }
+
+  .appt-title{
+    font-size: 24px;
   }
 }
