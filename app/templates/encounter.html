@@ -5,8 +5,8 @@
 {% endblock %}
 
 {% block actions %}
-  <a class="btn btn-ghost" href="/app/patients/{{ patient.id }}">Volver</a>
-  <a class="btn btn-ghost" href="{{ pdf_url }}" target="_blank" rel="noopener">PDF</a>
+  <a class="btn btn-outline" href="/app/patients/{{ patient.id }}">Volver</a>
+  <a class="btn btn-outline" href="{{ pdf_url }}" target="_blank" rel="noopener">PDF</a>
 
   {% if is_owner and not enc.ended_at %}
     <form method="post" action="/app/encounters/{{ enc.id }}/end" style="display:inline;">
@@ -16,12 +16,244 @@
 {% endblock %}
 
 {% block content %}
-  <div class="grid">
-    <div class="card">
-      <div class="card-header">
+<style>
+  .wiz-layout{
+    display:grid;
+    grid-template-columns:minmax(0, 2.15fr) minmax(320px, .85fr);
+    gap:16px;
+  }
+
+  .wiz-card{
+    background:#fff;
+    border:1px solid #dbe6f3;
+    border-radius:22px;
+    box-shadow:0 10px 28px rgba(24,39,75,.10);
+    overflow:hidden;
+  }
+
+  .wiz-head{
+    padding:18px 20px;
+    border-bottom:1px solid #e2ebf5;
+    background:linear-gradient(180deg,#f8fbff 0%, #eff6ff 100%);
+  }
+
+  .wiz-title{
+    font-size:18px;
+    font-weight:800;
+    color:#163c7a;
+  }
+
+  .wiz-sub{
+    font-size:13px;
+    color:#6b7280;
+    margin-top:4px;
+  }
+
+  .wiz-status{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    align-items:center;
+    margin-top:14px;
+  }
+
+  .wiz-progress{
+    padding:14px 16px;
+    border-bottom:1px solid #e2ebf5;
+    background:#fff;
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    position:sticky;
+    top:0;
+    z-index:5;
+  }
+
+  .wiz-step-link{
+    min-height:42px;
+    padding:10px 14px;
+    border-radius:999px;
+    border:1px solid #dbe6f3;
+    background:#f8fbff;
+    color:#163c7a;
+    font-weight:800;
+    font-size:13px;
+    cursor:pointer;
+  }
+
+  .wiz-step-link.active{
+    background:linear-gradient(180deg,#1d67d8 0%, #0b4dbb 100%);
+    color:#fff;
+    border-color:#0b4dbb;
+  }
+
+  .wiz-body{
+    padding:20px;
+  }
+
+  .wiz-page{
+    display:none;
+    gap:16px;
+  }
+
+  .wiz-page.active{
+    display:grid;
+  }
+
+  .wiz-section{
+    border:1px solid #dbe6f3;
+    border-radius:18px;
+    background:#fbfdff;
+    overflow:hidden;
+  }
+
+  .wiz-section-head{
+    padding:16px 18px;
+    border-bottom:1px solid #e7eef8;
+    background:#f4f8ff;
+  }
+
+  .wiz-section-title{
+    font-size:17px;
+    font-weight:800;
+    color:#173f7f;
+  }
+
+  .wiz-section-sub{
+    margin-top:4px;
+    font-size:13px;
+    color:#6b7280;
+  }
+
+  .wiz-section-body{
+    padding:18px;
+    display:grid;
+    gap:14px;
+  }
+
+  .wiz-grid-2{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:14px;
+  }
+
+  .wiz-grid-3{
+    display:grid;
+    grid-template-columns:repeat(3, 1fr);
+    gap:14px;
+  }
+
+  .wiz-grid-6{
+    display:grid;
+    grid-template-columns:repeat(6, 1fr);
+    gap:12px;
+  }
+
+  .wiz-field{
+    display:grid;
+    gap:8px;
+  }
+
+  .wiz-label{
+    font-size:13px;
+    font-weight:800;
+    color:#334155;
+  }
+
+  .wiz-note{
+    font-size:12px;
+    color:#6b7280;
+  }
+
+  .wiz-nav{
+    display:flex;
+    justify-content:space-between;
+    gap:10px;
+    align-items:center;
+    flex-wrap:wrap;
+    padding-top:8px;
+  }
+
+  .wiz-save-state{
+    font-size:12px;
+    font-weight:800;
+    color:#64748b;
+    background:#f8fbff;
+    border:1px solid #dbe6f3;
+    border-radius:999px;
+    padding:8px 12px;
+  }
+
+  .dx-list{
+    display:grid;
+    gap:10px;
+  }
+
+  .dx-row{
+    display:grid;
+    grid-template-columns:180px minmax(0, 1fr) 48px;
+    gap:10px;
+    align-items:end;
+    padding:12px;
+    border:1px solid #dbe6f3;
+    border-radius:16px;
+    background:#fff;
+  }
+
+  .dx-remove{
+    min-height:50px;
+  }
+
+  .side-card{
+    background:#fff;
+    border:1px solid #dbe6f3;
+    border-radius:22px;
+    box-shadow:0 10px 28px rgba(24,39,75,.10);
+    overflow:hidden;
+    height:fit-content;
+  }
+
+  .side-head{
+    padding:18px 20px;
+    border-bottom:1px solid #e2ebf5;
+    background:linear-gradient(180deg,#f8fbff 0%, #eff6ff 100%);
+  }
+
+  .side-body{
+    padding:18px;
+  }
+
+  .side-sticky{
+    position:sticky;
+    top:20px;
+  }
+
+  @media (max-width: 1200px){
+    .wiz-layout{
+      grid-template-columns:1fr;
+    }
+  }
+
+  @media (max-width: 900px){
+    .wiz-grid-2,
+    .wiz-grid-3,
+    .wiz-grid-6{
+      grid-template-columns:1fr;
+    }
+
+    .dx-row{
+      grid-template-columns:1fr;
+    }
+  }
+</style>
+
+<div class="wiz-layout">
+  <div class="wiz-card">
+    <div class="wiz-head">
+      <div class="row">
         <div>
-          <div class="h2">Nota clínica</div>
-          <div class="muted">
+          <div class="wiz-title">Nota clínica</div>
+          <div class="wiz-sub">
             Profesional: {{ doc.name if doc else ("Doctor ID " ~ enc.doctor_id) }}
             {% if doc and doc.specialty %} • {{ doc.specialty }}{% endif %}
             {% if doc and doc.registration %} • Reg. {{ doc.registration }}{% endif %}
@@ -47,156 +279,247 @@
         </div>
       </div>
 
-      <div class="card-body">
-        <div class="row">
-          <div class="pill">Creada: {{ enc.created_at.strftime("%Y-%m-%d %H:%M") if enc.created_at else "—" }}</div>
-          <div class="pill">Cierre: {{ enc.ended_at.strftime("%Y-%m-%d %H:%M") if enc.ended_at else "—" }}</div>
-        </div>
-
-        <div style="height:14px"></div>
-
-        {% if not can_edit_note %}
-          <div class="empty">
-            <div class="empty-title">
-              {% if not is_owner %}
-                Esta atención fue registrada por otro profesional
-              {% else %}
-                Edición bloqueada
-              {% endif %}
-            </div>
-            <div class="muted">
-              {% if not is_owner %}
-                Puedes ver toda la información y descargar el PDF. Si necesitas corrección, agrega una Evolución/Addendum.
-              {% else %}
-                Ya pasó la ventana de 20 minutos luego del cierre. Para correcciones, usa Evolución/Addendum.
-              {% endif %}
-            </div>
-          </div>
-          <div style="height:14px"></div>
-        {% endif %}
-
-        <form method="post" action="/app/encounters/{{ enc.id }}/save-note">
-          {% set dis = "" if can_edit_note else "disabled" %}
-
-          <div class="row" style="gap:10px; flex-wrap:wrap;">
-            <div style="flex:1; min-width:220px;">
-              <div class="muted" style="font-weight:700; margin-bottom:6px;">Tipo de atención</div>
-              <input class="input" name="visit_type" value="{{ enc.visit_type or 'Ambulatorio' }}" {{ dis }} />
-            </div>
-            <div style="flex:2; min-width:260px;">
-              <div class="muted" style="font-weight:700; margin-bottom:6px;">Motivo corto (para Timeline)</div>
-              <input class="input" name="chief_complaint_short" value="{{ enc.chief_complaint_short or '' }}" {{ dis }} />
-            </div>
-          </div>
-
-          <div style="height:14px"></div>
-
-          <div class="card" style="box-shadow:none;">
-            <div class="card-header" style="border-bottom:none;">
-              <div>
-                <div class="h2" style="font-size:16px;">Signos vitales</div>
-                <div class="muted">Completa solo lo necesario (opcional).</div>
-              </div>
-            </div>
-            <div class="card-body" style="padding-top:0;">
-              <div class="row" style="gap:10px; flex-wrap:wrap;">
-                <div style="flex:1; min-width:120px;">
-                  <div class="muted" style="font-weight:700; margin-bottom:6px;">TA Sistólica</div>
-                  <input class="input" name="ta_sys" value="{{ note.ta_sys if note else '' }}" {{ dis }} />
-                </div>
-                <div style="flex:1; min-width:120px;">
-                  <div class="muted" style="font-weight:700; margin-bottom:6px;">TA Diastólica</div>
-                  <input class="input" name="ta_dia" value="{{ note.ta_dia if note else '' }}" {{ dis }} />
-                </div>
-                <div style="flex:1; min-width:120px;">
-                  <div class="muted" style="font-weight:700; margin-bottom:6px;">FC</div>
-                  <input class="input" name="hr" value="{{ note.hr if note else '' }}" {{ dis }} />
-                </div>
-                <div style="flex:1; min-width:120px;">
-                  <div class="muted" style="font-weight:700; margin-bottom:6px;">FR</div>
-                  <input class="input" name="rr" value="{{ note.rr if note else '' }}" {{ dis }} />
-                </div>
-                <div style="flex:1; min-width:120px;">
-                  <div class="muted" style="font-weight:700; margin-bottom:6px;">Temp</div>
-                  <input class="input" name="temp" value="{{ note.temp if note else '' }}" {{ dis }} />
-                </div>
-                <div style="flex:1; min-width:120px;">
-                  <div class="muted" style="font-weight:700; margin-bottom:6px;">SpO2 %</div>
-                  <input class="input" name="spo2" value="{{ note.spo2 if note else '' }}" {{ dis }} />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div style="height:14px"></div>
-
-          <div class="muted" style="font-weight:800; margin-bottom:8px;">Motivo de consulta</div>
-          <textarea class="textarea" name="chief_complaint" {{ dis }}>{{ note.chief_complaint if note and note.chief_complaint else "" }}</textarea>
-
-          <div style="height:12px"></div>
-
-          <div class="muted" style="font-weight:800; margin-bottom:8px;">Enfermedad actual (HPI)</div>
-          <textarea class="textarea" name="hpi" {{ dis }}>{{ note.hpi if note and note.hpi else "" }}</textarea>
-
-          <div style="height:12px"></div>
-
-          <div class="muted" style="font-weight:800; margin-bottom:8px;">Examen físico</div>
-          <textarea class="textarea" name="physical_exam" {{ dis }}>{{ note.physical_exam if note and note.physical_exam else "" }}</textarea>
-
-          <div style="height:12px"></div>
-
-          <div class="muted" style="font-weight:800; margin-bottom:8px;">Exámenes complementarios</div>
-          <textarea class="textarea" name="complementary_tests" {{ dis }}>{{ note.complementary_tests if note and note.complementary_tests else "" }}</textarea>
-
-          <div style="height:12px"></div>
-
-          <div class="muted" style="font-weight:800; margin-bottom:8px;">Impresión diagnóstica</div>
-          <textarea class="textarea" name="assessment_dx" {{ dis }}>{{ note.assessment_dx if note and note.assessment_dx else "" }}</textarea>
-
-          <div style="height:12px"></div>
-
-          <div class="muted" style="font-weight:800; margin-bottom:8px;">Prescripción / Tratamiento</div>
-          <textarea class="textarea" name="plan_treatment" {{ dis }}>{{ note.plan_treatment if note and note.plan_treatment else "" }}</textarea>
-
-          <div style="height:12px"></div>
-
-          <div class="muted" style="font-weight:800; margin-bottom:8px;">Signos de alarma</div>
-          <textarea class="textarea" name="indications_alarm_signs" {{ dis }}>{{ note.indications_alarm_signs if note and note.indications_alarm_signs else "" }}</textarea>
-
-          <div style="height:12px"></div>
-
-          <div class="muted" style="font-weight:800; margin-bottom:8px;">Seguimiento</div>
-          <textarea class="textarea" name="follow_up" {{ dis }}>{{ note.follow_up if note and note.follow_up else "" }}</textarea>
-
-          <div style="height:14px"></div>
-
-          <div class="row" style="align-items:center;">
-            <div class="muted" style="max-width:520px;">
-              {% if can_edit_note %}
-                Guardar actualiza la nota y el “motivo corto” visible en el Timeline del paciente.
-              {% else %}
-                Modo solo lectura. Para correcciones usa Evolución/Addendum.
-              {% endif %}
-            </div>
-            <div class="actions">
-              {% if can_edit_note %}
-                <button class="btn btn-primary" type="submit">Guardar nota</button>
-              {% endif %}
-            </div>
-          </div>
-        </form>
+      <div class="wiz-status">
+        <span class="pill">Creada: {{ enc.created_at.strftime("%Y-%m-%d %H:%M") if enc.created_at else "—" }}</span>
+        <span class="pill">Cierre: {{ enc.ended_at.strftime("%Y-%m-%d %H:%M") if enc.ended_at else "—" }}</span>
+        <span class="wiz-save-state" id="saveState">Sin cambios</span>
       </div>
     </div>
 
-    <div class="card">
-      <div class="card-header">
-        <div>
-          <div class="h2">Evoluciones / Addendum</div>
-          <div class="muted">Correcciones y seguimiento (siempre permitido).</div>
+    {% if not can_edit_note %}
+      <div class="wiz-body">
+        <div class="empty">
+          <div class="empty-title">
+            {% if not is_owner %}
+              Esta atención fue registrada por otro profesional
+            {% else %}
+              Edición bloqueada
+            {% endif %}
+          </div>
+          <div class="muted">
+            {% if not is_owner %}
+              Puedes ver toda la información y descargar el PDF. Si necesitas corrección, agrega una Evolución/Addendum.
+            {% else %}
+              Ya pasó la ventana de 20 minutos luego del cierre. Para correcciones, usa Evolución/Addendum.
+            {% endif %}
+          </div>
         </div>
       </div>
+    {% endif %}
 
-      <div class="card-body">
+    <div class="wiz-progress" id="stepBar">
+      <button type="button" class="wiz-step-link active" data-step="0">1. Signos vitales</button>
+      <button type="button" class="wiz-step-link" data-step="1">2. Motivo / HPI</button>
+      <button type="button" class="wiz-step-link" data-step="2">3. Examen físico</button>
+      <button type="button" class="wiz-step-link" data-step="3">4. Diagnóstico</button>
+      <button type="button" class="wiz-step-link" data-step="4">5. Plan y seguimiento</button>
+    </div>
+
+    <div class="wiz-body">
+      <form method="post" action="/app/encounters/{{ enc.id }}/save-note" id="noteWizardForm">
+        {% set dis = "" if can_edit_note else "disabled" %}
+
+        <input type="hidden" name="assessment_dx" id="assessmentDxHidden" value="{{ note.assessment_dx if note and note.assessment_dx else '' }}">
+
+        <!-- STEP 1 -->
+        <section class="wiz-page active" data-page="0">
+          <div class="wiz-section">
+            <div class="wiz-section-head">
+              <div class="wiz-section-title">Signos vitales</div>
+              <div class="wiz-section-sub">Tipo de atención, motivo corto y parámetros básicos.</div>
+            </div>
+
+            <div class="wiz-section-body">
+              <div class="wiz-grid-2">
+                <div class="wiz-field">
+                  <label class="wiz-label">Tipo de atención</label>
+                  <input class="input" name="visit_type" value="{{ enc.visit_type or 'Ambulatorio' }}" {{ dis }}>
+                </div>
+
+                <div class="wiz-field">
+                  <label class="wiz-label">Motivo corto (para Timeline)</label>
+                  <input class="input" name="chief_complaint_short" value="{{ enc.chief_complaint_short or '' }}" {{ dis }}>
+                </div>
+              </div>
+
+              <div class="wiz-section">
+                <div class="wiz-section-head">
+                  <div class="wiz-section-title" style="font-size:16px;">Parámetros</div>
+                  <div class="wiz-section-sub">Completa solo lo necesario.</div>
+                </div>
+
+                <div class="wiz-section-body">
+                  <div class="wiz-grid-6">
+                    <div class="wiz-field">
+                      <label class="wiz-label">TA Sistólica</label>
+                      <input class="input" name="ta_sys" value="{{ note.ta_sys if note else '' }}" {{ dis }}>
+                    </div>
+
+                    <div class="wiz-field">
+                      <label class="wiz-label">TA Diastólica</label>
+                      <input class="input" name="ta_dia" value="{{ note.ta_dia if note else '' }}" {{ dis }}>
+                    </div>
+
+                    <div class="wiz-field">
+                      <label class="wiz-label">FC</label>
+                      <input class="input" name="hr" value="{{ note.hr if note else '' }}" {{ dis }}>
+                    </div>
+
+                    <div class="wiz-field">
+                      <label class="wiz-label">FR</label>
+                      <input class="input" name="rr" value="{{ note.rr if note else '' }}" {{ dis }}>
+                    </div>
+
+                    <div class="wiz-field">
+                      <label class="wiz-label">Temp</label>
+                      <input class="input" name="temp" value="{{ note.temp if note else '' }}" {{ dis }}>
+                    </div>
+
+                    <div class="wiz-field">
+                      <label class="wiz-label">SpO2 %</label>
+                      <input class="input" name="spo2" value="{{ note.spo2 if note else '' }}" {{ dis }}>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="wiz-nav">
+                <div class="wiz-note">Se guarda automáticamente al avanzar.</div>
+                <button type="button" class="btn btn-primary nextBtn" {% if not can_edit_note %}disabled{% endif %}>Siguiente</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- STEP 2 -->
+        <section class="wiz-page" data-page="1">
+          <div class="wiz-section">
+            <div class="wiz-section-head">
+              <div class="wiz-section-title">Motivo de consulta y enfermedad actual</div>
+              <div class="wiz-section-sub">Describe el motivo principal y la evolución clínica actual.</div>
+            </div>
+
+            <div class="wiz-section-body">
+              <div class="wiz-field">
+                <label class="wiz-label">Motivo de consulta</label>
+                <textarea class="textarea" name="chief_complaint" {{ dis }}>{{ note.chief_complaint if note and note.chief_complaint else "" }}</textarea>
+              </div>
+
+              <div class="wiz-field">
+                <label class="wiz-label">Enfermedad actual (HPI)</label>
+                <textarea class="textarea" name="hpi" {{ dis }}>{{ note.hpi if note and note.hpi else "" }}</textarea>
+              </div>
+
+              <div class="wiz-nav">
+                <button type="button" class="btn btn-outline prevBtn">Anterior</button>
+                <button type="button" class="btn btn-primary nextBtn" {% if not can_edit_note %}disabled{% endif %}>Siguiente</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- STEP 3 -->
+        <section class="wiz-page" data-page="2">
+          <div class="wiz-section">
+            <div class="wiz-section-head">
+              <div class="wiz-section-title">Examen físico</div>
+              <div class="wiz-section-sub">Registra los hallazgos clínicos del examen físico.</div>
+            </div>
+
+            <div class="wiz-section-body">
+              <div class="wiz-field">
+                <label class="wiz-label">Examen físico</label>
+                <textarea class="textarea" name="physical_exam" style="min-height:320px;" {{ dis }}>{{ note.physical_exam if note and note.physical_exam else "" }}</textarea>
+              </div>
+
+              <div class="wiz-nav">
+                <button type="button" class="btn btn-outline prevBtn">Anterior</button>
+                <button type="button" class="btn btn-primary nextBtn" {% if not can_edit_note %}disabled{% endif %}>Siguiente</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- STEP 4 -->
+        <section class="wiz-page" data-page="3">
+          <div class="wiz-section">
+            <div class="wiz-section-head">
+              <div class="wiz-section-title">Exámenes complementarios e impresión diagnóstica</div>
+              <div class="wiz-section-sub">Puedes agregar diagnósticos en lista con código CIE-10 y descripción.</div>
+            </div>
+
+            <div class="wiz-section-body">
+              <div class="wiz-field">
+                <label class="wiz-label">Exámenes complementarios</label>
+                <textarea class="textarea" name="complementary_tests" {{ dis }}>{{ note.complementary_tests if note and note.complementary_tests else "" }}</textarea>
+              </div>
+
+              <div class="wiz-field">
+                <label class="wiz-label">Impresión diagnóstica (lista CIE-10)</label>
+                <div id="dxList" class="dx-list"></div>
+
+                {% if can_edit_note %}
+                  <button type="button" class="btn btn-outline" id="addDxBtn">+ Agregar diagnóstico</button>
+                {% endif %}
+
+                <div class="wiz-note">
+                  Ejemplo: K81.0 — Colecistitis aguda.
+                </div>
+              </div>
+
+              <div class="wiz-nav">
+                <button type="button" class="btn btn-outline prevBtn">Anterior</button>
+                <button type="button" class="btn btn-primary nextBtn" {% if not can_edit_note %}disabled{% endif %}>Siguiente</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- STEP 5 -->
+        <section class="wiz-page" data-page="4">
+          <div class="wiz-section">
+            <div class="wiz-section-head">
+              <div class="wiz-section-title">Prescripción, signos de alarma y seguimiento</div>
+              <div class="wiz-section-sub">Último paso del registro clínico.</div>
+            </div>
+
+            <div class="wiz-section-body">
+              <div class="wiz-field">
+                <label class="wiz-label">Prescripción / Tratamiento</label>
+                <textarea class="textarea" name="plan_treatment" {{ dis }}>{{ note.plan_treatment if note and note.plan_treatment else "" }}</textarea>
+              </div>
+
+              <div class="wiz-field">
+                <label class="wiz-label">Signos de alarma</label>
+                <textarea class="textarea" name="indications_alarm_signs" {{ dis }}>{{ note.indications_alarm_signs if note and note.indications_alarm_signs else "" }}</textarea>
+              </div>
+
+              <div class="wiz-field">
+                <label class="wiz-label">Seguimiento</label>
+                <textarea class="textarea" name="follow_up" {{ dis }}>{{ note.follow_up if note and note.follow_up else "" }}</textarea>
+              </div>
+
+              <div class="wiz-nav">
+                <button type="button" class="btn btn-outline prevBtn">Anterior</button>
+                {% if can_edit_note %}
+                  <button type="submit" class="btn btn-primary">Guardar nota</button>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </section>
+      </form>
+    </div>
+  </div>
+
+  <div class="side-sticky">
+    <div class="side-card">
+      <div class="side-head">
+        <div class="wiz-title">Evoluciones / Addendum</div>
+        <div class="wiz-sub">Correcciones y seguimiento (siempre permitido).</div>
+      </div>
+
+      <div class="side-body">
         <form method="post" action="/app/encounters/{{ enc.id }}/add-evolution">
           <textarea class="textarea" name="content" placeholder="Escribe aquí la evolución / corrección / seguimiento..." required></textarea>
           <div style="height:10px"></div>
@@ -222,4 +545,200 @@
       </div>
     </div>
   </div>
+</div>
+
+<script>
+(function() {
+  const canEdit = {{ 'true' if can_edit_note else 'false' }};
+  const form = document.getElementById("noteWizardForm");
+  const pages = Array.from(document.querySelectorAll(".wiz-page"));
+  const stepLinks = Array.from(document.querySelectorAll(".wiz-step-link"));
+  const nextBtns = Array.from(document.querySelectorAll(".nextBtn"));
+  const prevBtns = Array.from(document.querySelectorAll(".prevBtn"));
+  const saveState = document.getElementById("saveState");
+  const dxList = document.getElementById("dxList");
+  const addDxBtn = document.getElementById("addDxBtn");
+  const assessmentHidden = document.getElementById("assessmentDxHidden");
+
+  let currentStep = 0;
+  let autosaveTimer = null;
+
+  function setSaveState(text) {
+    if (saveState) saveState.textContent = text;
+  }
+
+  function showStep(stepIndex) {
+    currentStep = stepIndex;
+    pages.forEach((page, idx) => {
+      page.classList.toggle("active", idx === stepIndex);
+    });
+    stepLinks.forEach((link, idx) => {
+      link.classList.toggle("active", idx === stepIndex);
+    });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function serializeDxList() {
+    const rows = Array.from(dxList.querySelectorAll(".dx-row"));
+    const lines = rows.map((row) => {
+      const code = (row.querySelector(".dx-code")?.value || "").trim();
+      const desc = (row.querySelector(".dx-desc")?.value || "").trim();
+      if (!code && !desc) return "";
+      if (code && desc) return `${code} - ${desc}`;
+      return code || desc;
+    }).filter(Boolean);
+
+    assessmentHidden.value = lines.join("\\n");
+  }
+
+  function addDxRow(code = "", desc = "") {
+    const row = document.createElement("div");
+    row.className = "dx-row";
+    row.innerHTML = `
+      <div class="wiz-field">
+        <label class="wiz-label">Código CIE-10</label>
+        <input class="input dx-code" type="text" placeholder="Ej: K81.0" value="${code.replace(/"/g, '&quot;')}" ${canEdit ? "" : "disabled"}>
+      </div>
+      <div class="wiz-field">
+        <label class="wiz-label">Descripción</label>
+        <input class="input dx-desc" type="text" placeholder="Ej: Colecistitis aguda" value="${desc.replace(/"/g, '&quot;')}" ${canEdit ? "" : "disabled"}>
+      </div>
+      <button type="button" class="btn btn-danger dx-remove" ${canEdit ? "" : "disabled"}>✕</button>
+    `;
+    dxList.appendChild(row);
+
+    row.querySelectorAll("input").forEach((el) => {
+      el.addEventListener("input", () => {
+        serializeDxList();
+        scheduleAutosave();
+      });
+    });
+
+    row.querySelector(".dx-remove").addEventListener("click", () => {
+      row.remove();
+      serializeDxList();
+      scheduleAutosave();
+    });
+
+    serializeDxList();
+  }
+
+  function bootstrapDx() {
+    const raw = (assessmentHidden.value || "").trim();
+    if (!raw) {
+      addDxRow("", "");
+      return;
+    }
+
+    const lines = raw.split("\\n").map(x => x.trim()).filter(Boolean);
+    if (lines.length === 0) {
+      addDxRow("", "");
+      return;
+    }
+
+    lines.forEach((line) => {
+      const parts = line.split(" - ");
+      if (parts.length >= 2) {
+        const code = parts.shift();
+        const desc = parts.join(" - ");
+        addDxRow(code, desc);
+      } else {
+        addDxRow("", line);
+      }
+    });
+  }
+
+  async function autosave() {
+    if (!canEdit) return true;
+
+    serializeDxList();
+    const formData = new FormData(form);
+
+    setSaveState("Guardando...");
+    try {
+      const response = await fetch(form.action, {
+        method: "POST",
+        body: formData,
+        headers: {
+          "X-Requested-With": "fetch"
+        }
+      });
+
+      if (!response.ok) {
+        setSaveState("Error al guardar");
+        return false;
+      }
+
+      const data = await response.json();
+      if (data.ok) {
+        setSaveState("Guardado " + data.saved_at);
+        return true;
+      }
+
+      setSaveState("Error al guardar");
+      return false;
+    } catch (error) {
+      setSaveState("Error al guardar");
+      return false;
+    }
+  }
+
+  function scheduleAutosave() {
+    if (!canEdit) return;
+    setSaveState("Cambios sin guardar");
+    clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(() => {
+      autosave();
+    }, 1200);
+  }
+
+  stepLinks.forEach((link, idx) => {
+    link.addEventListener("click", async () => {
+      const ok = await autosave();
+      if (ok) showStep(idx);
+    });
+  });
+
+  nextBtns.forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const ok = await autosave();
+      if (ok && currentStep < pages.length - 1) {
+        showStep(currentStep + 1);
+      }
+    });
+  });
+
+  prevBtns.forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const ok = await autosave();
+      if (ok && currentStep > 0) {
+        showStep(currentStep - 1);
+      }
+    });
+  });
+
+  form.querySelectorAll("input, textarea, select").forEach((field) => {
+    field.addEventListener("input", scheduleAutosave);
+    field.addEventListener("change", scheduleAutosave);
+  });
+
+  form.addEventListener("submit", async (e) => {
+    if (!canEdit) return;
+    e.preventDefault();
+    const ok = await autosave();
+    if (ok) {
+      setSaveState("Guardado");
+    }
+  });
+
+  if (addDxBtn) {
+    addDxBtn.addEventListener("click", () => {
+      addDxRow("", "");
+    });
+  }
+
+  bootstrapDx();
+  showStep(0);
+})();
+</script>
 {% endblock %}
