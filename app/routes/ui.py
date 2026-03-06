@@ -1,367 +1,744 @@
-from datetime import datetime, timedelta
-import os
-from zoneinfo import ZoneInfo
+{% extends "base.html" %}
 
-from fastapi import APIRouter, Depends, Request, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session, joinedload
+{% block title %}
+  Atención #{{ enc.id }} <span class="muted">• {{ patient.full_name }}</span>
+{% endblock %}
 
-from ..database import get_db
-from ..models import Appointment, Patient, Encounter, Doctor, ClinicalNote, EncounterEvolution
-from .auth import get_logged_doctor
+{% block actions %}
+  <a class="btn btn-outline" href="/app/patients/{{ patient.id }}">Volver</a>
+  <a class="btn btn-outline" href="{{ pdf_url }}" target="_blank" rel="noopener">PDF</a>
 
-router = APIRouter(prefix="/app", tags=["UI"])
-templates = Jinja2Templates(directory="app/templates")
+  {% if is_owner and not enc.ended_at %}
+    <form method="post" action="/app/encounters/{{ enc.id }}/end" style="display:inline;">
+      <button class="btn btn-primary" type="submit">Cerrar atención</button>
+    </form>
+  {% endif %}
+{% endblock %}
 
-APP_TZ = ZoneInfo(os.getenv("APP_TIMEZONE", "America/Guayaquil"))
+{% block content %}
+<style>
+  .wiz-layout{
+    display:grid;
+    grid-template-columns:minmax(0, 2.15fr) minmax(320px, .85fr);
+    gap:16px;
+  }
 
+  .wiz-card{
+    background:#fff;
+    border:1px solid #dbe6f3;
+    border-radius:22px;
+    box-shadow:0 10px 28px rgba(24,39,75,.10);
+    overflow:hidden;
+  }
 
-def _redirect_login():
-    return RedirectResponse(url="/login", status_code=302)
+  .wiz-head{
+    padding:18px 20px;
+    border-bottom:1px solid #e2ebf5;
+    background:linear-gradient(180deg,#f8fbff 0%, #eff6ff 100%);
+  }
 
+  .wiz-title{
+    font-size:18px;
+    font-weight:800;
+    color:#163c7a;
+  }
 
-def _require_login(request: Request, db: Session):
-    doctor = get_logged_doctor(request, db)
-    if not doctor:
-        return None
-    return doctor
+  .wiz-sub{
+    font-size:13px;
+    color:#6b7280;
+    margin-top:4px;
+  }
 
+  .wiz-status{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    align-items:center;
+    margin-top:14px;
+  }
 
-def _parse_date(s: str | None):
-    if not s:
-        return None
-    try:
-        return datetime.strptime(s, "%Y-%m-%d").date()
-    except Exception:
-        return None
+  .wiz-progress{
+    padding:14px 16px;
+    border-bottom:1px solid #e2ebf5;
+    background:#fff;
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    position:sticky;
+    top:0;
+    z-index:5;
+  }
 
+  .wiz-step-link{
+    min-height:42px;
+    padding:10px 14px;
+    border-radius:999px;
+    border:1px solid #dbe6f3;
+    background:#f8fbff;
+    color:#163c7a;
+    font-weight:800;
+    font-size:13px;
+    cursor:pointer;
+  }
 
-def _now_local_naive() -> datetime:
-    return datetime.now(APP_TZ).replace(tzinfo=None)
+  .wiz-step-link.active{
+    background:linear-gradient(180deg,#1d67d8 0%, #0b4dbb 100%);
+    color:#fff;
+    border-color:#0b4dbb;
+  }
 
+  .wiz-body{
+    padding:20px;
+  }
 
-def _can_start_now(appt: Appointment) -> bool:
-    now = _now_local_naive()
-    start_window = appt.start_at - timedelta(minutes=15)
-    end_window = appt.end_at + timedelta(minutes=30)
-    return start_window <= now <= end_window
+  .wiz-page{
+    display:none;
+    gap:16px;
+  }
 
+  .wiz-page.active{
+    display:grid;
+  }
 
-def _compute_ui_badge(appt: Appointment) -> str:
-    if appt.status == "canceled":
-        return "cancelado"
-    if appt.status == "no_show":
-        return "cancelado_auto"
-    if appt.status == "completed":
-        return "completado"
-    if appt.encounter_id:
-        return "en_atencion"
+  .wiz-section{
+    border:1px solid #dbe6f3;
+    border-radius:18px;
+    background:#fbfdff;
+    overflow:hidden;
+  }
 
-    now = _now_local_naive()
+  .wiz-section-head{
+    padding:16px 18px;
+    border-bottom:1px solid #e7eef8;
+    background:#f4f8ff;
+  }
 
-    if now < (appt.start_at - timedelta(minutes=15)):
-        return "pendiente"
+  .wiz-section-title{
+    font-size:17px;
+    font-weight:800;
+    color:#173f7f;
+  }
 
-    if now <= appt.end_at:
-        return "a_tiempo"
+  .wiz-section-sub{
+    margin-top:4px;
+    font-size:13px;
+    color:#6b7280;
+  }
 
-    return "atrasado"
+  .wiz-section-body{
+    padding:18px;
+    display:grid;
+    gap:14px;
+  }
 
+  .wiz-grid-2{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:14px;
+  }
 
-def _is_editable(enc: Encounter) -> bool:
-    if enc.ended_at is None:
-        return True
-    return datetime.utcnow() <= (enc.ended_at + timedelta(minutes=20))
+  .wiz-grid-3{
+    display:grid;
+    grid-template-columns:repeat(3, 1fr);
+    gap:14px;
+  }
 
+  .wiz-grid-6{
+    display:grid;
+    grid-template-columns:repeat(6, 1fr);
+    gap:12px;
+  }
 
-@router.get("", response_class=HTMLResponse)
-@router.get("/", response_class=HTMLResponse)
-def ui_dashboard(request: Request, db: Session = Depends(get_db), date: str | None = None):
-    current_doctor = _require_login(request, db)
-    if not current_doctor:
-        return _redirect_login()
+  .wiz-field{
+    display:grid;
+    gap:8px;
+  }
 
-    base_date = _parse_date(date) or datetime.now(APP_TZ).date()
-    start_date = base_date - timedelta(days=1)
-    end_date = base_date + timedelta(days=7)
+  .wiz-label{
+    font-size:13px;
+    font-weight:800;
+    color:#334155;
+  }
 
-    prev_date = (base_date - timedelta(days=1)).isoformat()
-    next_date = (base_date + timedelta(days=1)).isoformat()
+  .wiz-note{
+    font-size:12px;
+    color:#6b7280;
+  }
 
-    start_dt = datetime(start_date.year, start_date.month, start_date.day, 0, 0, 0)
-    end_dt = datetime(end_date.year, end_date.month, end_date.day, 23, 59, 59)
+  .wiz-nav{
+    display:flex;
+    justify-content:space-between;
+    gap:10px;
+    align-items:center;
+    flex-wrap:wrap;
+    padding-top:8px;
+  }
 
-    appts = (
-        db.query(Appointment)
-        .options(joinedload(Appointment.patient))
-        .filter(Appointment.doctor_id == current_doctor.id)
-        .filter(Appointment.start_at >= start_dt)
-        .filter(Appointment.start_at <= end_dt)
-        .order_by(Appointment.start_at.asc())
-        .all()
-    )
+  .wiz-save-state{
+    font-size:12px;
+    font-weight:800;
+    color:#64748b;
+    background:#f8fbff;
+    border:1px solid #dbe6f3;
+    border-radius:999px;
+    padding:8px 12px;
+  }
 
-    for a in appts:
-        a.can_start_now = _can_start_now(a)
-        a.ui_badge = _compute_ui_badge(a)
+  .dx-list{
+    display:grid;
+    gap:10px;
+  }
 
-    days = {}
-    for a in appts:
-        k = a.start_at.date().isoformat()
-        days.setdefault(k, []).append(a)
+  .dx-row{
+    display:grid;
+    grid-template-columns:180px minmax(0, 1fr) 48px;
+    gap:10px;
+    align-items:end;
+    padding:12px;
+    border:1px solid #dbe6f3;
+    border-radius:16px;
+    background:#fff;
+  }
 
-    ordered_days = []
-    d = start_date
-    while d <= end_date:
-        ordered_days.append(d.isoformat())
-        d += timedelta(days=1)
+  .dx-remove{
+    min-height:50px;
+  }
 
-    ctx = {
-        "request": request,
-        "current_doctor": current_doctor,
-        "base_date": base_date,
-        "start_date": start_date,
-        "end_date": end_date,
-        "prev_date": prev_date,
-        "next_date": next_date,
-        "ordered_days": ordered_days,
-        "days": days,
+  .side-card{
+    background:#fff;
+    border:1px solid #dbe6f3;
+    border-radius:22px;
+    box-shadow:0 10px 28px rgba(24,39,75,.10);
+    overflow:hidden;
+    height:fit-content;
+  }
+
+  .side-head{
+    padding:18px 20px;
+    border-bottom:1px solid #e2ebf5;
+    background:linear-gradient(180deg,#f8fbff 0%, #eff6ff 100%);
+  }
+
+  .side-body{
+    padding:18px;
+  }
+
+  .side-sticky{
+    position:sticky;
+    top:20px;
+  }
+
+  @media (max-width: 1200px){
+    .wiz-layout{
+      grid-template-columns:1fr;
+    }
+  }
+
+  @media (max-width: 900px){
+    .wiz-grid-2,
+    .wiz-grid-3,
+    .wiz-grid-6{
+      grid-template-columns:1fr;
     }
 
-    html = templates.get_template("dashboard.html").render(**ctx)
-    return HTMLResponse(html)
+    .dx-row{
+      grid-template-columns:1fr;
+    }
+  }
+</style>
 
+<div class="wiz-layout">
+  <div class="wiz-card">
+    <div class="wiz-head">
+      <div class="row">
+        <div>
+          <div class="wiz-title">Nota clínica</div>
+          <div class="wiz-sub">
+            Profesional: {{ doc.name if doc else ("Doctor ID " ~ enc.doctor_id) }}
+            {% if doc and doc.specialty %} • {{ doc.specialty }}{% endif %}
+            {% if doc and doc.registration %} • Reg. {{ doc.registration }}{% endif %}
+          </div>
+        </div>
 
-@router.get("/patients", response_class=HTMLResponse)
-def ui_patients(request: Request, db: Session = Depends(get_db)):
-    current_doctor = _require_login(request, db)
-    if not current_doctor:
-        return _redirect_login()
+        <div class="actions">
+          {% if enc.ended_at %}
+            <span class="badge badge-locked">Cerrada</span>
+          {% else %}
+            <span class="badge badge-open">Abierta</span>
+          {% endif %}
 
-    patients = db.query(Patient).order_by(Patient.id.desc()).all()
-    return templates.TemplateResponse(
-        "patients.html",
-        {"request": request, "current_doctor": current_doctor, "patients": patients},
-    )
+          {% if enc.ended_at and editable %}
+            <span class="badge">Editable (20 min)</span>
+          {% elif enc.ended_at and not editable %}
+            <span class="badge badge-locked">Edición bloqueada</span>
+          {% endif %}
 
+          {% if not is_owner %}
+            <span class="badge">Solo lectura</span>
+          {% endif %}
+        </div>
+      </div>
 
-@router.get("/patients/{patient_id}", response_class=HTMLResponse)
-def ui_patient_detail(patient_id: int, request: Request, db: Session = Depends(get_db)):
-    current_doctor = _require_login(request, db)
-    if not current_doctor:
-        return _redirect_login()
+      <div class="wiz-status">
+        <span class="pill">Creada: {{ enc.created_at.strftime("%Y-%m-%d %H:%M") if enc.created_at else "—" }}</span>
+        <span class="pill">Cierre: {{ enc.ended_at.strftime("%Y-%m-%d %H:%M") if enc.ended_at else "—" }}</span>
+        <span class="wiz-save-state" id="saveState">Sin cambios</span>
+      </div>
+    </div>
 
-    patient = db.query(Patient).filter(Patient.id == patient_id).first()
-    if not patient:
-        raise HTTPException(status_code=404, detail="Paciente no encontrado")
+    {% if not can_edit_note %}
+      <div class="wiz-body">
+        <div class="empty">
+          <div class="empty-title">
+            {% if not is_owner %}
+              Esta atención fue registrada por otro profesional
+            {% else %}
+              Edición bloqueada
+            {% endif %}
+          </div>
+          <div class="muted">
+            {% if not is_owner %}
+              Puedes ver toda la información y descargar el PDF. Si necesitas corrección, agrega una Evolución/Addendum.
+            {% else %}
+              Ya pasó la ventana de 20 minutos luego del cierre. Para correcciones, usa Evolución/Addendum.
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    {% endif %}
 
-    encounters = (
-        db.query(Encounter)
-        .filter(Encounter.patient_id == patient_id)
-        .order_by(Encounter.created_at.desc(), Encounter.id.desc())
-        .all()
-    )
+    <div class="wiz-progress" id="stepBar">
+      <button type="button" class="wiz-step-link active" data-step="0">1. Signos vitales</button>
+      <button type="button" class="wiz-step-link" data-step="1">2. Motivo / HPI</button>
+      <button type="button" class="wiz-step-link" data-step="2">3. Examen físico</button>
+      <button type="button" class="wiz-step-link" data-step="3">4. Diagnóstico</button>
+      <button type="button" class="wiz-step-link" data-step="4">5. Plan y seguimiento</button>
+    </div>
 
-    items = []
-    for enc in encounters:
-        doc = db.query(Doctor).filter(Doctor.id == enc.doctor_id).first()
-        items.append({"enc": enc, "doc": doc, "pdf_url": f"/encounters/{enc.id}/pdf"})
+    <div class="wiz-body">
+      <form method="post" action="/app/encounters/{{ enc.id }}/save-note" id="noteWizardForm">
+        {% set dis = "" if can_edit_note else "disabled" %}
 
-    return templates.TemplateResponse(
-        "patient_detail.html",
-        {
-            "request": request,
-            "current_doctor": current_doctor,
-            "patient": patient,
-            "items": items,
-            "pdf_consolidated_url": f"/patients/{patient.id}/history/pdf",
-        },
-    )
+        <input type="hidden" name="assessment_dx" id="assessmentDxHidden" value="{{ note.assessment_dx if note and note.assessment_dx else '' }}">
 
+        <!-- STEP 1 -->
+        <section class="wiz-page active" data-page="0">
+          <div class="wiz-section">
+            <div class="wiz-section-head">
+              <div class="wiz-section-title">Signos vitales</div>
+              <div class="wiz-section-sub">Tipo de atención, motivo corto y parámetros básicos.</div>
+            </div>
 
-@router.post("/patients/{patient_id}/new-encounter")
-def ui_new_encounter(patient_id: int, request: Request, db: Session = Depends(get_db)):
-    current_doctor = _require_login(request, db)
-    if not current_doctor:
-        return _redirect_login()
+            <div class="wiz-section-body">
+              <div class="wiz-grid-2">
+                <div class="wiz-field">
+                  <label class="wiz-label">Tipo de atención</label>
+                  <input class="input" name="visit_type" value="{{ enc.visit_type or 'Ambulatorio' }}" {{ dis }}>
+                </div>
 
-    patient = db.query(Patient).filter(Patient.id == patient_id).first()
-    if not patient:
-        raise HTTPException(status_code=404, detail="Paciente no encontrado")
+                <div class="wiz-field">
+                  <label class="wiz-label">Motivo corto (para Timeline)</label>
+                  <input class="input" name="chief_complaint_short" value="{{ enc.chief_complaint_short or '' }}" {{ dis }}>
+                </div>
+              </div>
 
-    enc = Encounter(
-        patient_id=patient.id,
-        doctor_id=current_doctor.id,
-        visit_type="Ambulatorio",
-        chief_complaint_short="",
-        created_at=datetime.utcnow(),
-        ended_at=None,
-        is_signed=False,
-    )
-    db.add(enc)
-    db.commit()
-    db.refresh(enc)
+              <div class="wiz-section">
+                <div class="wiz-section-head">
+                  <div class="wiz-section-title" style="font-size:16px;">Parámetros</div>
+                  <div class="wiz-section-sub">Completa solo lo necesario.</div>
+                </div>
 
-    return RedirectResponse(url=f"/app/encounters/{enc.id}", status_code=302)
+                <div class="wiz-section-body">
+                  <div class="wiz-grid-6">
+                    <div class="wiz-field">
+                      <label class="wiz-label">TA Sistólica</label>
+                      <input class="input" name="ta_sys" value="{{ note.ta_sys if note else '' }}" {{ dis }}>
+                    </div>
 
+                    <div class="wiz-field">
+                      <label class="wiz-label">TA Diastólica</label>
+                      <input class="input" name="ta_dia" value="{{ note.ta_dia if note else '' }}" {{ dis }}>
+                    </div>
 
-@router.get("/encounters/{encounter_id}", response_class=HTMLResponse)
-def ui_encounter(encounter_id: int, request: Request, db: Session = Depends(get_db)):
-    current_doctor = _require_login(request, db)
-    if not current_doctor:
-        return _redirect_login()
+                    <div class="wiz-field">
+                      <label class="wiz-label">FC</label>
+                      <input class="input" name="hr" value="{{ note.hr if note else '' }}" {{ dis }}>
+                    </div>
 
-    enc = db.query(Encounter).filter(Encounter.id == encounter_id).first()
-    if not enc:
-        raise HTTPException(status_code=404, detail="Consulta no encontrada")
+                    <div class="wiz-field">
+                      <label class="wiz-label">FR</label>
+                      <input class="input" name="rr" value="{{ note.rr if note else '' }}" {{ dis }}>
+                    </div>
 
-    patient = db.query(Patient).filter(Patient.id == enc.patient_id).first()
-    doc = db.query(Doctor).filter(Doctor.id == enc.doctor_id).first()
+                    <div class="wiz-field">
+                      <label class="wiz-label">Temp</label>
+                      <input class="input" name="temp" value="{{ note.temp if note else '' }}" {{ dis }}>
+                    </div>
 
-    note = db.query(ClinicalNote).filter(ClinicalNote.encounter_id == encounter_id).first()
-    evols = (
-        db.query(EncounterEvolution)
-        .filter(EncounterEvolution.encounter_id == encounter_id)
-        .order_by(EncounterEvolution.created_at.asc())
-        .all()
-    )
+                    <div class="wiz-field">
+                      <label class="wiz-label">SpO2 %</label>
+                      <input class="input" name="spo2" value="{{ note.spo2 if note else '' }}" {{ dis }}>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
-    editable_window = _is_editable(enc)
-    is_owner = (enc.doctor_id == current_doctor.id)
-    can_edit_note = is_owner and editable_window
+              <div class="wiz-nav">
+                <div class="wiz-note">Se guarda automáticamente al avanzar.</div>
+                <button type="button" class="btn btn-primary nextBtn" {% if not can_edit_note %}disabled{% endif %}>Siguiente</button>
+              </div>
+            </div>
+          </div>
+        </section>
 
-    return templates.TemplateResponse(
-        "encounter.html",
-        {
-            "request": request,
-            "current_doctor": current_doctor,
-            "enc": enc,
-            "patient": patient,
-            "doc": doc,
-            "note": note,
-            "evols": evols,
-            "editable": editable_window,
-            "is_owner": is_owner,
-            "can_edit_note": can_edit_note,
-            "pdf_url": f"/encounters/{enc.id}/pdf",
-        },
-    )
+        <!-- STEP 2 -->
+        <section class="wiz-page" data-page="1">
+          <div class="wiz-section">
+            <div class="wiz-section-head">
+              <div class="wiz-section-title">Motivo de consulta y enfermedad actual</div>
+              <div class="wiz-section-sub">Describe el motivo principal y la evolución clínica actual.</div>
+            </div>
 
+            <div class="wiz-section-body">
+              <div class="wiz-field">
+                <label class="wiz-label">Motivo de consulta</label>
+                <textarea class="textarea" name="chief_complaint" {{ dis }}>{{ note.chief_complaint if note and note.chief_complaint else "" }}</textarea>
+              </div>
 
-@router.post("/encounters/{encounter_id}/save-note")
-async def ui_save_note(encounter_id: int, request: Request, db: Session = Depends(get_db)):
-    current_doctor = _require_login(request, db)
-    if not current_doctor:
-        if (request.headers.get("X-Requested-With") or "").lower() == "fetch":
-            return JSONResponse({"ok": False, "error": "Sesión expirada"}, status_code=401)
-        return _redirect_login()
+              <div class="wiz-field">
+                <label class="wiz-label">Enfermedad actual (HPI)</label>
+                <textarea class="textarea" name="hpi" {{ dis }}>{{ note.hpi if note and note.hpi else "" }}</textarea>
+              </div>
 
-    enc = db.query(Encounter).filter(Encounter.id == encounter_id).first()
-    if not enc:
-        raise HTTPException(status_code=404, detail="Consulta no encontrada")
+              <div class="wiz-nav">
+                <button type="button" class="btn btn-outline prevBtn">Anterior</button>
+                <button type="button" class="btn btn-primary nextBtn" {% if not can_edit_note %}disabled{% endif %}>Siguiente</button>
+              </div>
+            </div>
+          </div>
+        </section>
 
-    if enc.doctor_id != current_doctor.id:
-        raise HTTPException(status_code=403, detail="No autorizado")
+        <!-- STEP 3 -->
+        <section class="wiz-page" data-page="2">
+          <div class="wiz-section">
+            <div class="wiz-section-head">
+              <div class="wiz-section-title">Examen físico</div>
+              <div class="wiz-section-sub">Registra los hallazgos clínicos del examen físico.</div>
+            </div>
 
-    if not _is_editable(enc):
-        raise HTTPException(
-            status_code=403,
-            detail="Ventana de edición cerrada (20 min). Usa Evolución/Addendum para correcciones."
-        )
+            <div class="wiz-section-body">
+              <div class="wiz-field">
+                <label class="wiz-label">Examen físico</label>
+                <textarea class="textarea" name="physical_exam" style="min-height:320px;" {{ dis }}>{{ note.physical_exam if note and note.physical_exam else "" }}</textarea>
+              </div>
 
-    form = await request.form()
+              <div class="wiz-nav">
+                <button type="button" class="btn btn-outline prevBtn">Anterior</button>
+                <button type="button" class="btn btn-primary nextBtn" {% if not can_edit_note %}disabled{% endif %}>Siguiente</button>
+              </div>
+            </div>
+          </div>
+        </section>
 
-    enc.chief_complaint_short = (form.get("chief_complaint_short") or "").strip()[:120]
-    enc.visit_type = (form.get("visit_type") or enc.visit_type or "Ambulatorio").strip()[:50]
+        <!-- STEP 4 -->
+        <section class="wiz-page" data-page="3">
+          <div class="wiz-section">
+            <div class="wiz-section-head">
+              <div class="wiz-section-title">Exámenes complementarios e impresión diagnóstica</div>
+              <div class="wiz-section-sub">Puedes agregar diagnósticos en lista con código CIE-10 y descripción.</div>
+            </div>
 
-    note = db.query(ClinicalNote).filter(ClinicalNote.encounter_id == encounter_id).first()
-    if not note:
-        note = ClinicalNote(encounter_id=encounter_id)
-        db.add(note)
+            <div class="wiz-section-body">
+              <div class="wiz-field">
+                <label class="wiz-label">Exámenes complementarios</label>
+                <textarea class="textarea" name="complementary_tests" {{ dis }}>{{ note.complementary_tests if note and note.complementary_tests else "" }}</textarea>
+              </div>
 
-    note.chief_complaint = (form.get("chief_complaint") or "").strip()
-    note.hpi = (form.get("hpi") or "").strip()
-    note.physical_exam = (form.get("physical_exam") or "").strip()
-    note.complementary_tests = (form.get("complementary_tests") or "").strip()
-    note.assessment_dx = (form.get("assessment_dx") or "").strip()
-    note.plan_treatment = (form.get("plan_treatment") or "").strip()
-    note.indications_alarm_signs = (form.get("indications_alarm_signs") or "").strip()
-    note.follow_up = (form.get("follow_up") or "").strip()
+              <div class="wiz-field">
+                <label class="wiz-label">Impresión diagnóstica (lista CIE-10)</label>
+                <div id="dxList" class="dx-list"></div>
 
-    def to_int(v):
-        v = (v or "").strip()
-        if v == "":
-            return None
-        try:
-            return int(v)
-        except Exception:
-            return None
+                {% if can_edit_note %}
+                  <button type="button" class="btn btn-outline" id="addDxBtn">+ Agregar diagnóstico</button>
+                {% endif %}
 
-    note.ta_sys = to_int(form.get("ta_sys"))
-    note.ta_dia = to_int(form.get("ta_dia"))
-    note.hr = to_int(form.get("hr"))
-    note.rr = to_int(form.get("rr"))
-    note.spo2 = to_int(form.get("spo2"))
+                <div class="wiz-note">
+                  Ejemplo: K81.0 — Colecistitis aguda.
+                </div>
+              </div>
 
-    temp = (form.get("temp") or "").strip()
-    note.temp = temp if temp else None
+              <div class="wiz-nav">
+                <button type="button" class="btn btn-outline prevBtn">Anterior</button>
+                <button type="button" class="btn btn-primary nextBtn" {% if not can_edit_note %}disabled{% endif %}>Siguiente</button>
+              </div>
+            </div>
+          </div>
+        </section>
 
-    db.commit()
+        <!-- STEP 5 -->
+        <section class="wiz-page" data-page="4">
+          <div class="wiz-section">
+            <div class="wiz-section-head">
+              <div class="wiz-section-title">Prescripción, signos de alarma y seguimiento</div>
+              <div class="wiz-section-sub">Último paso del registro clínico.</div>
+            </div>
 
-    if (request.headers.get("X-Requested-With") or "").lower() == "fetch":
-        return JSONResponse(
-            {
-                "ok": True,
-                "message": "Guardado",
-                "saved_at": datetime.now().strftime("%H:%M:%S"),
-            }
-        )
+            <div class="wiz-section-body">
+              <div class="wiz-field">
+                <label class="wiz-label">Prescripción / Tratamiento</label>
+                <textarea class="textarea" name="plan_treatment" {{ dis }}>{{ note.plan_treatment if note and note.plan_treatment else "" }}</textarea>
+              </div>
 
-    return RedirectResponse(url=f"/app/encounters/{encounter_id}", status_code=302)
+              <div class="wiz-field">
+                <label class="wiz-label">Signos de alarma</label>
+                <textarea class="textarea" name="indications_alarm_signs" {{ dis }}>{{ note.indications_alarm_signs if note and note.indications_alarm_signs else "" }}</textarea>
+              </div>
 
+              <div class="wiz-field">
+                <label class="wiz-label">Seguimiento</label>
+                <textarea class="textarea" name="follow_up" {{ dis }}>{{ note.follow_up if note and note.follow_up else "" }}</textarea>
+              </div>
 
-@router.post("/encounters/{encounter_id}/end")
-def ui_end_encounter(encounter_id: int, request: Request, db: Session = Depends(get_db)):
-    current_doctor = _require_login(request, db)
-    if not current_doctor:
-        return _redirect_login()
+              <div class="wiz-nav">
+                <button type="button" class="btn btn-outline prevBtn">Anterior</button>
+                {% if can_edit_note %}
+                  <button type="submit" class="btn btn-primary">Guardar nota</button>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </section>
+      </form>
+    </div>
+  </div>
 
-    enc = db.query(Encounter).filter(Encounter.id == encounter_id).first()
-    if not enc:
-        raise HTTPException(status_code=404, detail="Consulta no encontrada")
+  <div class="side-sticky">
+    <div class="side-card">
+      <div class="side-head">
+        <div class="wiz-title">Evoluciones / Addendum</div>
+        <div class="wiz-sub">Correcciones y seguimiento (siempre permitido).</div>
+      </div>
 
-    if enc.doctor_id != current_doctor.id:
-        raise HTTPException(status_code=403, detail="No autorizado")
+      <div class="side-body">
+        <form method="post" action="/app/encounters/{{ enc.id }}/add-evolution">
+          <textarea class="textarea" name="content" placeholder="Escribe aquí la evolución / corrección / seguimiento..." required></textarea>
+          <div style="height:10px"></div>
+          <button class="btn btn-primary" type="submit">Agregar evolución</button>
+        </form>
 
-    if enc.ended_at is None:
-        enc.ended_at = datetime.utcnow()
-        db.commit()
+        <div style="height:18px"></div>
 
-    return RedirectResponse(url=f"/app/encounters/{encounter_id}", status_code=302)
+        {% if evols|length == 0 %}
+          <div class="empty">
+            <div class="empty-title">Sin evoluciones</div>
+            <div class="muted">Aquí aparecerán los addendum en orden.</div>
+          </div>
+        {% endif %}
 
+        {% for ev in evols %}
+          <div class="evolution">
+            <div class="strong">{{ ev.created_at.strftime("%Y-%m-%d %H:%M") if ev.created_at else "" }}</div>
+            <div class="muted">Autor ID: {{ ev.author_doctor_id }}</div>
+            <div class="evolution-text">{{ ev.content }}</div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
 
-@router.post("/encounters/{encounter_id}/add-evolution")
-async def ui_add_evolution(encounter_id: int, request: Request, db: Session = Depends(get_db)):
-    current_doctor = _require_login(request, db)
-    if not current_doctor:
-        return _redirect_login()
+<script>
+(function() {
+  const canEdit = {{ 'true' if can_edit_note else 'false' }};
+  const form = document.getElementById("noteWizardForm");
+  const pages = Array.from(document.querySelectorAll(".wiz-page"));
+  const stepLinks = Array.from(document.querySelectorAll(".wiz-step-link"));
+  const nextBtns = Array.from(document.querySelectorAll(".nextBtn"));
+  const prevBtns = Array.from(document.querySelectorAll(".prevBtn"));
+  const saveState = document.getElementById("saveState");
+  const dxList = document.getElementById("dxList");
+  const addDxBtn = document.getElementById("addDxBtn");
+  const assessmentHidden = document.getElementById("assessmentDxHidden");
 
-    enc = db.query(Encounter).filter(Encounter.id == encounter_id).first()
-    if not enc:
-        raise HTTPException(status_code=404, detail="Consulta no encontrada")
+  let currentStep = 0;
+  let autosaveTimer = null;
 
-    form = await request.form()
-    content = (form.get("content") or "").strip()
-    if not content:
-        return RedirectResponse(url=f"/app/encounters/{encounter_id}", status_code=302)
+  function setSaveState(text) {
+    if (saveState) saveState.textContent = text;
+  }
 
-    ev = EncounterEvolution(
-        encounter_id=encounter_id,
-        author_doctor_id=current_doctor.id,
-        content=content,
-    )
-    db.add(ev)
-    db.commit()
+  function showStep(stepIndex) {
+    currentStep = stepIndex;
+    pages.forEach((page, idx) => {
+      page.classList.toggle("active", idx === stepIndex);
+    });
+    stepLinks.forEach((link, idx) => {
+      link.classList.toggle("active", idx === stepIndex);
+    });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
-    return RedirectResponse(url=f"/app/encounters/{encounter_id}", status_code=302)
+  function serializeDxList() {
+    const rows = Array.from(dxList.querySelectorAll(".dx-row"));
+    const lines = rows.map((row) => {
+      const code = (row.querySelector(".dx-code")?.value || "").trim();
+      const desc = (row.querySelector(".dx-desc")?.value || "").trim();
+      if (!code && !desc) return "";
+      if (code && desc) return `${code} - ${desc}`;
+      return code || desc;
+    }).filter(Boolean);
+
+    assessmentHidden.value = lines.join("\\n");
+  }
+
+  function addDxRow(code = "", desc = "") {
+    const row = document.createElement("div");
+    row.className = "dx-row";
+    row.innerHTML = `
+      <div class="wiz-field">
+        <label class="wiz-label">Código CIE-10</label>
+        <input class="input dx-code" type="text" placeholder="Ej: K81.0" value="${code.replace(/"/g, '&quot;')}" ${canEdit ? "" : "disabled"}>
+      </div>
+      <div class="wiz-field">
+        <label class="wiz-label">Descripción</label>
+        <input class="input dx-desc" type="text" placeholder="Ej: Colecistitis aguda" value="${desc.replace(/"/g, '&quot;')}" ${canEdit ? "" : "disabled"}>
+      </div>
+      <button type="button" class="btn btn-danger dx-remove" ${canEdit ? "" : "disabled"}>✕</button>
+    `;
+    dxList.appendChild(row);
+
+    row.querySelectorAll("input").forEach((el) => {
+      el.addEventListener("input", () => {
+        serializeDxList();
+        scheduleAutosave();
+      });
+    });
+
+    row.querySelector(".dx-remove").addEventListener("click", () => {
+      row.remove();
+      serializeDxList();
+      scheduleAutosave();
+    });
+
+    serializeDxList();
+  }
+
+  function bootstrapDx() {
+    const raw = (assessmentHidden.value || "").trim();
+    if (!raw) {
+      addDxRow("", "");
+      return;
+    }
+
+    const lines = raw.split("\\n").map(x => x.trim()).filter(Boolean);
+    if (lines.length === 0) {
+      addDxRow("", "");
+      return;
+    }
+
+    lines.forEach((line) => {
+      const parts = line.split(" - ");
+      if (parts.length >= 2) {
+        const code = parts.shift();
+        const desc = parts.join(" - ");
+        addDxRow(code, desc);
+      } else {
+        addDxRow("", line);
+      }
+    });
+  }
+
+  async function autosave() {
+    if (!canEdit) return true;
+
+    serializeDxList();
+    const formData = new FormData(form);
+
+    setSaveState("Guardando...");
+    try {
+      const response = await fetch(form.action, {
+        method: "POST",
+        body: formData,
+        headers: {
+          "X-Requested-With": "fetch"
+        }
+      });
+
+      if (!response.ok) {
+        setSaveState("Error al guardar");
+        return false;
+      }
+
+      const data = await response.json();
+      if (data.ok) {
+        setSaveState("Guardado " + data.saved_at);
+        return true;
+      }
+
+      setSaveState("Error al guardar");
+      return false;
+    } catch (error) {
+      setSaveState("Error al guardar");
+      return false;
+    }
+  }
+
+  function scheduleAutosave() {
+    if (!canEdit) return;
+    setSaveState("Cambios sin guardar");
+    clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(() => {
+      autosave();
+    }, 1200);
+  }
+
+  stepLinks.forEach((link, idx) => {
+    link.addEventListener("click", async () => {
+      const ok = await autosave();
+      if (ok) showStep(idx);
+    });
+  });
+
+  nextBtns.forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const ok = await autosave();
+      if (ok && currentStep < pages.length - 1) {
+        showStep(currentStep + 1);
+      }
+    });
+  });
+
+  prevBtns.forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const ok = await autosave();
+      if (ok && currentStep > 0) {
+        showStep(currentStep - 1);
+      }
+    });
+  });
+
+  form.querySelectorAll("input, textarea, select").forEach((field) => {
+    field.addEventListener("input", scheduleAutosave);
+    field.addEventListener("change", scheduleAutosave);
+  });
+
+  form.addEventListener("submit", async (e) => {
+    if (!canEdit) return;
+    e.preventDefault();
+    const ok = await autosave();
+    if (ok) {
+      setSaveState("Guardado");
+    }
+  });
+
+  if (addDxBtn) {
+    addDxBtn.addEventListener("click", () => {
+      addDxRow("", "");
+    });
+  }
+
+  bootstrapDx();
+  showStep(0);
+})();
+</script>
+{% endblock %}
