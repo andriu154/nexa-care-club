@@ -1,34 +1,35 @@
-// app/static/app.js
-
 function ncOpenModal() {
   const modal = document.getElementById("nc-modal");
+  if (!modal) return;
   modal.classList.add("open");
   modal.setAttribute("aria-hidden", "false");
-  document.body.classList.add("nc-modal-lock");
 }
 
 function ncCloseModal() {
   const modal = document.getElementById("nc-modal");
+  if (!modal) return;
   modal.classList.remove("open");
   modal.setAttribute("aria-hidden", "true");
-  document.body.classList.remove("nc-modal-lock");
+  const body = document.getElementById("nc-modal-body");
+  if (body) body.innerHTML = "";
 }
 
 async function ncLoadIntoModal(url) {
-  ncOpenModal();
-
   const body = document.getElementById("nc-modal-body");
-  body.innerHTML = `<div class="nc-spinner">Cargando...</div>`;
+  if (!body) return;
+
+  ncOpenModal();
+  body.innerHTML = `<div style="padding:20px;font-weight:700;color:#6b7280;">Cargando...</div>`;
 
   const res = await fetch(url, {
     headers: { "X-Requested-With": "fetch" }
   });
 
-  body.innerHTML = await res.text();
+  const html = await res.text();
+  body.innerHTML = html;
 
-  // Si el contenido trae un form, lo interceptamos para enviarlo por fetch
-  const form = body.querySelector("form");
-  if (form) {
+  const forms = body.querySelectorAll("form");
+  forms.forEach((form) => {
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
 
@@ -42,41 +43,61 @@ async function ncLoadIntoModal(url) {
         headers: { "X-Requested-With": "fetch" }
       });
 
-      // Si el backend redirige, vamos a esa URL (recargar agenda)
       if (r.redirected) {
         window.location.href = r.url;
         return;
       }
 
-      // Si devuelve HTML (por ejemplo, vuelve a mostrar el formulario), lo reemplazamos
-      body.innerHTML = await r.text();
+      const nextHtml = await r.text();
+      body.innerHTML = nextHtml;
+
+      const nestedForms = body.querySelectorAll("form");
+      nestedForms.forEach((nestedForm) => {
+        nestedForm.addEventListener("submit", async (ev) => {
+          ev.preventDefault();
+          const nestedFd = new FormData(nestedForm);
+          const nestedAction = nestedForm.getAttribute("action") || url;
+          const nestedMethod = (nestedForm.getAttribute("method") || "POST").toUpperCase();
+
+          const nestedResp = await fetch(nestedAction, {
+            method: nestedMethod,
+            body: nestedFd,
+            headers: { "X-Requested-With": "fetch" }
+          });
+
+          if (nestedResp.redirected) {
+            window.location.href = nestedResp.url;
+            return;
+          }
+
+          body.innerHTML = await nestedResp.text();
+        });
+      });
     });
-  }
+  });
 }
 
 document.addEventListener("click", (e) => {
-  const open = e.target.closest("[data-nc-modal-open]");
-  if (open) {
+  const openTrigger = e.target.closest("[data-nc-modal-open]");
+  if (openTrigger) {
     e.preventDefault();
-    const url = open.getAttribute("href");
-    ncLoadIntoModal(url);
+    const url = openTrigger.getAttribute("href");
+    if (url) ncLoadIntoModal(url);
     return;
   }
 
-  const close = e.target.closest("[data-nc-modal-close]");
-  if (close) {
+  const closeTrigger = e.target.closest("[data-nc-modal-close]");
+  if (closeTrigger) {
     e.preventDefault();
     ncCloseModal();
     return;
   }
 
-  // Click fuera de la tarjeta cierra el modal
   if (e.target && e.target.id === "nc-modal") {
     ncCloseModal();
   }
 });
 
-// ESC para cerrar
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") ncCloseModal();
 });
