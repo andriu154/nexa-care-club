@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, RedirectResponse
 from sqlalchemy.orm import Session
 from io import BytesIO
 from datetime import datetime
@@ -12,8 +12,8 @@ from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase.pdfmetrics import stringWidth
 
 from ..database import get_db
-from ..deps.auth import get_current_doctor
 from ..models import Doctor, Patient, Encounter, ClinicalNote
+from .auth import get_logged_doctor
 
 router = APIRouter(tags=["PDF"])
 
@@ -37,6 +37,17 @@ KNOWN_DOCTORS = {
         "specialty": "Médico Cirujano",
     },
 }
+
+
+def _require_login(request: Request, db: Session):
+    doctor = get_logged_doctor(request, db)
+    if not doctor:
+        return None
+    return doctor
+
+
+def _redirect_login():
+    return RedirectResponse(url="/login", status_code=302)
 
 
 def _asset_path(filename: str) -> str:
@@ -209,10 +220,10 @@ def _signature_block(c, width, LEFT, RIGHT, y, attending_doctor: Doctor | None):
     c.drawString(LEFT + 14, y - 72, "Registro profesional:")
 
     c.setStrokeColor(COLOR_MUTED)
-    c.line(LEFT + 140, y - 22, LEFT + 320, y - 22)  # firma
-    c.line(LEFT + 140, y - 44, LEFT + 320, y - 44)  # nombre
-    c.line(LEFT + 140, y - 60, LEFT + 320, y - 60)  # especialidad
-    c.line(LEFT + 140, y - 76, LEFT + 320, y - 76)  # registro
+    c.line(LEFT + 140, y - 22, LEFT + 320, y - 22)
+    c.line(LEFT + 140, y - 44, LEFT + 320, y - 44)
+    c.line(LEFT + 140, y - 60, LEFT + 320, y - 60)
+    c.line(LEFT + 140, y - 76, LEFT + 320, y - 76)
 
     c.setFillColor(COLOR_TEXT)
     c.setFont("Helvetica", 9)
@@ -240,13 +251,14 @@ def download_encounter_pdf(
     encounter_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor),
 ):
+    current_doctor = _require_login(request, db)
+    if not current_doctor:
+        return _redirect_login()
+
     enc = db.query(Encounter).filter(Encounter.id == encounter_id).first()
     if not enc:
         raise HTTPException(status_code=404, detail="Consulta no encontrada")
-
-    # ✅ todos los médicos autenticados pueden descargar (sin 403 por dueño)
 
     patient = db.query(Patient).filter(Patient.id == enc.patient_id).first()
     note = db.query(ClinicalNote).filter(ClinicalNote.encounter_id == enc.id).first()
@@ -352,7 +364,7 @@ def download_encounter_pdf(
     return StreamingResponse(
         buf,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
     )
 
 
@@ -361,8 +373,11 @@ def download_patient_history_pdf(
     patient_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor),
 ):
+    current_doctor = _require_login(request, db)
+    if not current_doctor:
+        return _redirect_login()
+
     patient = db.query(Patient).filter(Patient.id == patient_id).first()
     if not patient:
         raise HTTPException(status_code=404, detail="Paciente no encontrado")
@@ -395,7 +410,6 @@ def download_patient_history_pdf(
 
     start_page("Historia Clínica — Consolidado")
 
-    # Encabezado paciente
     c.setFont("Helvetica-Bold", 12)
     c.setFillColor(COLOR_TITLE)
     c.drawString(LEFT, y, "Paciente")
@@ -427,10 +441,9 @@ def download_patient_history_pdf(
         return StreamingResponse(
             buf,
             media_type="application/pdf",
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            headers={"Content-Disposition": f'inline; filename="{filename}"'},
         )
 
-    # ÍNDICE
     c.setFont("Helvetica-Bold", 12)
     c.setFillColor(COLOR_TITLE)
     c.drawString(LEFT, y, "Índice de atenciones")
@@ -560,5 +573,5 @@ def download_patient_history_pdf(
     return StreamingResponse(
         buf,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
     )

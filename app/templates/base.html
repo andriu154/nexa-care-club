@@ -7,50 +7,71 @@
   <link rel="stylesheet" href="/static/styles.css"/>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 
 <body>
   <div class="app-shell">
     <aside class="sidebar">
-      <div class="brand">
-        <div class="brand-mark"></div>
-        <div>
-          <div class="brand-name">NexaCenter</div>
-          <div class="brand-sub">Plataforma clínica</div>
-        </div>
+      <div class="sidebar-top">
+        <a href="/app" class="brand" style="text-decoration:none;">
+          <div class="brand-mark"></div>
+          <div>
+            <div class="brand-name">NexaCenter</div>
+            <div class="brand-sub">Plataforma clínica</div>
+          </div>
+        </a>
+
+        <nav class="nav">
+          <a class="nav-item {% if request.url.path == '/app' or request.url.path == '/app/' %}active{% endif %}" href="/app">
+            <span class="nav-icon">🗓</span>
+            <span>Agenda</span>
+          </a>
+
+          <a class="nav-item {% if request.url.path.startswith('/app/patients') %}active{% endif %}" href="/app/patients">
+            <span class="nav-icon">👥</span>
+            <span>Pacientes</span>
+          </a>
+
+          <a class="nav-item" href="/docs" target="_blank">
+            <span class="nav-icon">📘</span>
+            <span>API / Docs</span>
+          </a>
+        </nav>
       </div>
 
-      <nav class="nav">
-        <a class="nav-item" href="/app">Agenda</a>
-        <a class="nav-item" href="/app/patients">Pacientes</a>
-        <a class="nav-item" href="/docs" target="_blank">API / Docs</a>
-
+      <div class="sidebar-bottom">
         {% if current_doctor %}
+          <div class="usercard">
+            <div class="user-avatar">{{ (current_doctor.name[:1] if current_doctor else "N") }}</div>
+            <div class="user-meta">
+              <div class="user-name">{{ current_doctor.name if current_doctor else "—" }}</div>
+              <div class="user-role">
+                {{ current_doctor.specialty if current_doctor and current_doctor.specialty else "Profesional" }}
+                {% if current_doctor and current_doctor.registration %}
+                  • Reg. {{ current_doctor.registration }}
+                {% endif %}
+              </div>
+            </div>
+          </div>
+
           <form method="post" action="/logout" style="margin-top:12px;">
-            <button class="btn btn-ghost" type="submit" style="width:100%;">Salir</button>
+            <button class="btn btn-ghost w100" type="submit">Salir</button>
           </form>
         {% endif %}
-      </nav>
-
-      <div class="usercard">
-        <div class="user-avatar">{{ (current_doctor.name[:1] if current_doctor else "N") }}</div>
-        <div class="user-meta">
-          <div class="user-name">{{ current_doctor.name if current_doctor else "—" }}</div>
-          <div class="user-role">
-            {{ current_doctor.specialty if current_doctor and current_doctor.specialty else "Profesional" }}
-            {% if current_doctor and current_doctor.registration %}
-              • Reg. {{ current_doctor.registration }}
-            {% endif %}
-          </div>
-        </div>
       </div>
     </aside>
 
     <main class="main">
       <header class="topbar">
-        <div class="topbar-title">{% block title %}{% endblock %}</div>
-        <div class="topbar-actions">{% block actions %}{% endblock %}</div>
+        <div>
+          <div class="topbar-title">{% block title %}{% endblock %}</div>
+          <div class="topbar-subtitle">Sistema clínico inteligente</div>
+        </div>
+
+        <div class="topbar-actions">
+          {% block actions %}{% endblock %}
+        </div>
       </header>
 
       <section class="content">
@@ -59,16 +80,14 @@
     </main>
   </div>
 
-  <!-- ✅ MODAL GLOBAL (se usa para "+ Nueva cita") -->
+  <!-- Modal global -->
   <div id="nc-modal" class="nc-modal" aria-hidden="true">
     <div class="nc-modal-card" role="dialog" aria-modal="true" aria-labelledby="nc-modal-title">
       <div class="nc-modal-header">
         <div class="nc-modal-title" id="nc-modal-title">Nueva cita</div>
         <button type="button" class="nc-icon-btn" data-nc-modal-close aria-label="Cerrar">✕</button>
       </div>
-      <div id="nc-modal-body" class="nc-modal-body">
-        <!-- aquí se inyecta HTML -->
-      </div>
+      <div id="nc-modal-body" class="nc-modal-body"></div>
     </div>
   </div>
 

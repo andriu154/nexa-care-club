@@ -6,7 +6,7 @@
 
 {% block actions %}
   <a class="btn btn-ghost" href="/app/patients/{{ patient.id }}">Volver</a>
-  <a class="btn btn-ghost" href="{{ pdf_url }}" target="_blank">PDF</a>
+  <a class="btn btn-ghost" href="{{ pdf_url }}" target="_blank" rel="noopener">PDF</a>
 
   {% if is_owner and not enc.ended_at %}
     <form method="post" action="/app/encounters/{{ enc.id }}/end" style="display:inline;">
@@ -17,9 +17,6 @@
 
 {% block content %}
   <div class="grid">
-    <!-- =========================
-         CARD: Nota clínica (FORM)
-         ========================= -->
     <div class="card">
       <div class="card-header">
         <div>
@@ -79,10 +76,8 @@
         {% endif %}
 
         <form method="post" action="/app/encounters/{{ enc.id }}/save-note">
-          <!-- disable inputs if cannot edit -->
           {% set dis = "" if can_edit_note else "disabled" %}
 
-          <!-- Top mini fields -->
           <div class="row" style="gap:10px; flex-wrap:wrap;">
             <div style="flex:1; min-width:220px;">
               <div class="muted" style="font-weight:700; margin-bottom:6px;">Tipo de atención</div>
@@ -96,7 +91,6 @@
 
           <div style="height:14px"></div>
 
-          <!-- Vital signs -->
           <div class="card" style="box-shadow:none;">
             <div class="card-header" style="border-bottom:none;">
               <div>
@@ -136,7 +130,6 @@
 
           <div style="height:14px"></div>
 
-          <!-- Main note fields -->
           <div class="muted" style="font-weight:800; margin-bottom:8px;">Motivo de consulta</div>
           <textarea class="textarea" name="chief_complaint" {{ dis }}>{{ note.chief_complaint if note and note.chief_complaint else "" }}</textarea>
 
@@ -195,9 +188,6 @@
       </div>
     </div>
 
-    <!-- =========================
-         CARD: Evoluciones / Addendum
-         ========================= -->
     <div class="card">
       <div class="card-header">
         <div>
