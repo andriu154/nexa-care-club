@@ -5,134 +5,309 @@
 {% endblock %}
 
 {% block actions %}
-  <a class="btn btn-ghost" data-nc-modal-open href="/app/appointments/new?date={{ base_date }}&modal=1">+ Nueva cita</a>
+  <a class="btn btn-primary" data-nc-modal-open href="/app/appointments/new?date={{ base_date }}&modal=1">
+    + Nueva cita
+  </a>
 {% endblock %}
 
 {% block content %}
 
-  <style>
-    .badge {
-      display:inline-flex;
-      align-items:center;
-      gap:6px;
-      padding:4px 10px;
-      border-radius:999px;
-      font-size:12px;
-      font-weight:700;
-      border:1px solid rgba(0,0,0,0.15);
-      line-height:1;
-      white-space:nowrap;
+<style>
+  .agenda-toolbar{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:14px;
+    flex-wrap:wrap;
+    margin-bottom:18px;
+  }
+
+  .agenda-toolbar-left{
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+  }
+
+  .agenda-toolbar-title{
+    font-size:18px;
+    font-weight:800;
+    color:#163c7a;
+  }
+
+  .agenda-toolbar-sub{
+    font-size:13px;
+    color:#6b7280;
+  }
+
+  .agenda-toolbar-right{
+    display:flex;
+    gap:10px;
+    align-items:center;
+    flex-wrap:wrap;
+  }
+
+  .agenda-date-form{
+    display:flex;
+    gap:8px;
+    align-items:center;
+    flex-wrap:wrap;
+  }
+
+  .agenda-board{
+    display:grid;
+    grid-template-columns: repeat(4, minmax(240px, 1fr));
+    gap:16px;
+  }
+
+  .agenda-day{
+    background:#ffffff;
+    border:1px solid #dbe6f3;
+    border-radius:22px;
+    box-shadow:0 10px 28px rgba(24,39,75,.10);
+    overflow:hidden;
+    min-height:280px;
+  }
+
+  .agenda-day-head{
+    padding:16px 18px;
+    background:linear-gradient(180deg,#f8fbff 0%, #eff6ff 100%);
+    border-bottom:1px solid #e2ebf5;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:10px;
+  }
+
+  .agenda-day-title{
+    font-size:18px;
+    font-weight:800;
+    color:#163c7a;
+  }
+
+  .agenda-day-sub{
+    font-size:12px;
+    color:#6b7280;
+    margin-top:4px;
+  }
+
+  .agenda-day-body{
+    padding:16px;
+    display:grid;
+    gap:12px;
+  }
+
+  .agenda-empty{
+    border:1px dashed #c8d7eb;
+    background:#f8fbff;
+    color:#6b7280;
+    border-radius:16px;
+    padding:16px;
+    font-size:13px;
+  }
+
+  .appt-card{
+    border:1px solid #dbe6f3;
+    background:#ffffff;
+    border-radius:18px;
+    padding:14px;
+    display:grid;
+    gap:12px;
+    box-shadow:0 8px 18px rgba(24,39,75,.06);
+  }
+
+  .appt-time{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    padding:8px 12px;
+    border-radius:12px;
+    background:#eef4ff;
+    color:#0b4dbb;
+    font-size:12px;
+    font-weight:800;
+    width:fit-content;
+  }
+
+  .appt-patient{
+    font-size:15px;
+    font-weight:800;
+    color:#1f2937;
+    line-height:1.35;
+  }
+
+  .appt-reason{
+    font-size:13px;
+    color:#6b7280;
+  }
+
+  .appt-status{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    align-items:center;
+  }
+
+  .status-chip{
+    display:inline-flex;
+    align-items:center;
+    padding:7px 10px;
+    border-radius:999px;
+    font-size:11px;
+    font-weight:800;
+    border:1px solid #dbe6f3;
+    background:#f8fbff;
+    color:#334155;
+  }
+
+  .status-green{
+    background:#ecfff5;
+    border-color:#bdeccf;
+    color:#087443;
+  }
+
+  .status-orange{
+    background:#fff7e8;
+    border-color:#f8d79b;
+    color:#9a6700;
+  }
+
+  .status-red{
+    background:#fff0f1;
+    border-color:#f4c6c8;
+    color:#b42318;
+  }
+
+  .status-gray{
+    background:#f3f4f6;
+    border-color:#d1d5db;
+    color:#4b5563;
+  }
+
+  .appt-actions{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+
+  .appt-actions .btn{
+    width:100%;
+    justify-content:center;
+  }
+
+  .appt-reschedule{
+    border-top:1px solid #edf2f7;
+    padding-top:10px;
+  }
+
+  .appt-reschedule summary{
+    list-style:none;
+  }
+
+  .appt-reschedule summary::-webkit-details-marker{
+    display:none;
+  }
+
+  .appt-reschedule-form{
+    display:grid;
+    gap:8px;
+    margin-top:10px;
+  }
+
+  @media (max-width: 1500px){
+    .agenda-board{
+      grid-template-columns: repeat(3, minmax(240px, 1fr));
     }
-    .badge-green { background:#d1fae5; color:#065f46; border-color:#34d399; }
-    .badge-orange { background:#ffedd5; color:#9a3412; border-color:#fb923c; }
-    .badge-red { background:#fee2e2; color:#991b1b; border-color:#f87171; }
-    .badge-gray { background:#f3f4f6; color:#374151; border-color:#d1d5db; }
+  }
 
-    .btn-green {
-      background:#16a34a;
-      color:white;
-      border:1px solid rgba(0,0,0,0.12);
+  @media (max-width: 1100px){
+    .agenda-board{
+      grid-template-columns: repeat(2, minmax(240px, 1fr));
     }
-    .btn-green:hover { filter:brightness(0.95); }
+  }
 
-    .btn-red {
-      background:#dc2626;
-      color:white;
-      border:1px solid rgba(0,0,0,0.12);
+  @media (max-width: 700px){
+    .agenda-board{
+      grid-template-columns: 1fr;
     }
-    .btn-red:hover { filter:brightness(0.95); }
+  }
+</style>
 
-    .btn-sm {
-      padding:6px 10px;
-      border-radius:10px;
-      font-size:12px;
-      font-weight:700;
-    }
-
-    .btn-disabled {
-      background:#e5e7eb;
-      color:#6b7280;
-      border:1px solid rgba(0,0,0,0.08);
-      cursor:not-allowed;
-      box-shadow:none !important;
-      transform:none !important;
-    }
-  </style>
-
-  <div class="card">
-    <div style="display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap;">
-      <div>
-        <h3 style="margin:0;">Ventana de agenda</h3>
-        <div class="muted" style="margin-top:6px;">
-          Ayer ({{ start_date }}) → Próximos 7 días ({{ end_date }})
-        </div>
-      </div>
-
-      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-        <a class="btn btn-ghost" href="/app?date={{ prev_date }}">◀ Día anterior</a>
-        <a class="btn btn-ghost" href="/app">Hoy</a>
-        <a class="btn btn-ghost" href="/app?date={{ next_date }}">Día siguiente ▶</a>
-
-        <form method="get" action="/app" style="display:flex; gap:8px; align-items:center;">
-          <input class="input" type="date" name="date" value="{{ base_date }}" style="min-width:170px;">
-          <button class="btn btn-primary" type="submit">Ir</button>
-        </form>
-      </div>
+<div class="agenda-toolbar">
+  <div class="agenda-toolbar-left">
+    <div class="agenda-toolbar-title">Ventana de agenda</div>
+    <div class="agenda-toolbar-sub">
+      Ayer ({{ start_date }}) → Próximos 7 días ({{ end_date }})
     </div>
   </div>
 
+  <div class="agenda-toolbar-right">
+    <a class="btn btn-outline" href="/app?date={{ prev_date }}">◀ Día anterior</a>
+    <a class="btn btn-outline" href="/app">Hoy</a>
+    <a class="btn btn-outline" href="/app?date={{ next_date }}">Día siguiente ▶</a>
+
+    <form method="get" action="/app" class="agenda-date-form">
+      <input class="input" type="date" name="date" value="{{ base_date }}" style="min-width:180px;">
+      <button class="btn btn-primary" type="submit">Ir</button>
+    </form>
+  </div>
+</div>
+
+<div class="agenda-board">
   {% for day in ordered_days %}
-    <div class="card" style="margin-top:14px;">
-      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
-        <h3 style="margin:0;">{{ day }}</h3>
-        <a class="btn btn-ghost" data-nc-modal-open href="/app/appointments/new?date={{ day }}&modal=1">Agendar</a>
+    <div class="agenda-day">
+      <div class="agenda-day-head">
+        <div>
+          <div class="agenda-day-title">{{ day }}</div>
+          <div class="agenda-day-sub">Agenda del día</div>
+        </div>
+
+        <a class="btn btn-outline btn-sm" data-nc-modal-open href="/app/appointments/new?date={{ day }}&modal=1">
+          Agendar
+        </a>
       </div>
 
-      {% if day not in days or (days[day] | length) == 0 %}
-        <div class="muted" style="margin-top:10px;">Sin citas.</div>
-      {% else %}
-        <div class="list" style="margin-top:10px;">
+      <div class="agenda-day-body">
+        {% if day not in days or (days[day] | length) == 0 %}
+          <div class="agenda-empty">Sin citas.</div>
+        {% else %}
           {% for a in days[day] %}
-            <div style="display:flex; gap:12px; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid rgba(255,255,255,0.06);">
-
-              <div style="min-width:120px;">
-                <strong>{{ a.start_at.strftime("%H:%M") }}</strong>
-                <span class="muted">– {{ a.end_at.strftime("%H:%M") }}</span>
+            <div class="appt-card">
+              <div class="appt-time">
+                {{ a.start_at.strftime("%H:%M") }} – {{ a.end_at.strftime("%H:%M") }}
               </div>
 
-              <div style="flex:1;">
-                <div><strong>{{ a.patient.full_name }}</strong></div>
-                <div class="muted" style="margin-top:2px;">
-                  {{ a.reason if a.reason else "—" }}
+              <div>
+                <div class="appt-patient">{{ a.patient.full_name }}</div>
+                <div class="appt-reason">
+                  {{ a.reason if a.reason else "Sin motivo registrado" }}
                 </div>
               </div>
 
-              <div style="min-width:170px; text-align:right;">
+              <div class="appt-status">
                 {% if a.ui_badge == "a_tiempo" %}
-                  <span class="badge badge-green">A tiempo</span>
+                  <span class="status-chip status-green">A tiempo</span>
                 {% elif a.ui_badge == "atrasado" %}
-                  <span class="badge badge-orange">Atrasado</span>
+                  <span class="status-chip status-orange">Atrasado</span>
                 {% elif a.ui_badge == "en_atencion" %}
-                  <span class="badge badge-green">En atención</span>
+                  <span class="status-chip status-green">En atención</span>
                 {% elif a.ui_badge == "completado" %}
-                  <span class="badge badge-gray">Completado</span>
+                  <span class="status-chip status-gray">Completado</span>
                 {% elif a.ui_badge == "cancelado" or a.ui_badge == "cancelado_auto" %}
-                  <span class="badge badge-red">Cancelado</span>
+                  <span class="status-chip status-red">Cancelado</span>
                 {% else %}
-                  <span class="badge badge-gray">Pendiente</span>
+                  <span class="status-chip status-gray">Pendiente</span>
                 {% endif %}
               </div>
 
-              <div style="display:flex; gap:8px; align-items:center; justify-content:flex-end; flex-wrap:wrap;">
-
+              <div class="appt-actions">
                 {% if a.ui_badge == "en_atencion" and a.encounter_id %}
-                  <a class="btn btn-ghost btn-sm" href="/app/encounters/{{ a.encounter_id }}">Abrir historia</a>
+                  <a class="btn btn-outline" href="/app/encounters/{{ a.encounter_id }}">Abrir historia</a>
                 {% else %}
-                  <form method="post" action="/app/appointments/{{ a.id }}/start" style="display:inline;">
+                  <form method="post" action="/app/appointments/{{ a.id }}/start">
                     {% if a.can_start_now %}
-                      <button class="btn btn-sm btn-green" type="submit">INICIAR ATENCIÓN</button>
+                      <button class="btn btn-success" type="submit">INICIAR ATENCIÓN</button>
                     {% else %}
-                      <button class="btn btn-sm btn-disabled" type="button" disabled title="Disponible cuando sea la hora de la cita">
+                      <button class="btn btn-disabled" type="button" disabled>
                         INICIAR ATENCIÓN
                       </button>
                     {% endif %}
@@ -140,30 +315,30 @@
                 {% endif %}
 
                 {% if a.ui_badge != "cancelado" and a.ui_badge != "cancelado_auto" and a.ui_badge != "completado" and a.ui_badge != "en_atencion" %}
-                  <form method="post" action="/app/appointments/{{ a.id }}/cancel?date={{ day }}" style="display:inline;">
-                    <button class="btn btn-sm btn-red" type="submit">Cancelar cita</button>
+                  <form method="post" action="/app/appointments/{{ a.id }}/cancel?date={{ day }}">
+                    <button class="btn btn-danger" type="submit">Cancelar cita</button>
                   </form>
                 {% endif %}
 
                 {% if a.ui_badge != "cancelado" and a.ui_badge != "cancelado_auto" and a.ui_badge != "completado" %}
-                  <details>
-                    <summary class="btn btn-ghost btn-sm" style="cursor:pointer;">Reagendar</summary>
-                    <form method="post" action="/app/appointments/{{ a.id }}/reschedule" style="margin-top:10px;">
+                  <details class="appt-reschedule">
+                    <summary class="btn btn-outline">Reagendar</summary>
+
+                    <form method="post" action="/app/appointments/{{ a.id }}/reschedule" class="appt-reschedule-form">
                       <input class="input" type="hidden" name="date" value="{{ day }}">
-                      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                        <input class="input" type="time" name="time" value="{{ a.start_at.strftime('%H:%M') }}" required>
-                        <input class="input" type="number" name="duration_min" value="{{ ((a.end_at - a.start_at).seconds // 60) }}" min="10" max="240" required>
-                        <button class="btn btn-primary btn-sm" type="submit">Guardar</button>
-                      </div>
+                      <input class="input" type="time" name="time" value="{{ a.start_at.strftime('%H:%M') }}" required>
+                      <input class="input" type="number" name="duration_min" value="{{ ((a.end_at - a.start_at).seconds // 60) }}" min="10" max="240" required>
+                      <button class="btn btn-primary" type="submit">Guardar cambio</button>
                     </form>
                   </details>
                 {% endif %}
-
               </div>
             </div>
           {% endfor %}
-        </div>
-      {% endif %}
+        {% endif %}
+      </div>
     </div>
   {% endfor %}
+</div>
+
 {% endblock %}
