@@ -74,7 +74,7 @@
   .agenda-filter-field{
     display:grid;
     gap:6px;
-    min-width:240px;
+    min-width:260px;
   }
 
   .agenda-filter-label{
@@ -328,13 +328,13 @@
   </div>
 
   <div class="agenda-toolbar-right">
-    <a class="btn btn-outline" href="/app?date={{ prev_date }}{% if selected_doctor_id %}&doctor_id={{ selected_doctor_id }}{% endif %}">◀ Día anterior</a>
-    <a class="btn btn-outline" href="/app{% if selected_doctor_id %}?doctor_id={{ selected_doctor_id }}{% endif %}">Hoy</a>
-    <a class="btn btn-outline" href="/app?date={{ next_date }}{% if selected_doctor_id %}&doctor_id={{ selected_doctor_id }}{% endif %}">Día siguiente ▶</a>
+    <a class="btn btn-outline" href="/app?date={{ prev_date }}{% if selected_doctor_key %}&doctor_key={{ selected_doctor_key }}{% endif %}">◀ Día anterior</a>
+    <a class="btn btn-outline" href="/app{% if selected_doctor_key %}?doctor_key={{ selected_doctor_key }}{% endif %}">Hoy</a>
+    <a class="btn btn-outline" href="/app?date={{ next_date }}{% if selected_doctor_key %}&doctor_key={{ selected_doctor_key }}{% endif %}">Día siguiente ▶</a>
 
     <form method="get" action="/app" class="agenda-date-form">
-      {% if selected_doctor_id %}
-        <input type="hidden" name="doctor_id" value="{{ selected_doctor_id }}">
+      {% if selected_doctor_key %}
+        <input type="hidden" name="doctor_key" value="{{ selected_doctor_key }}">
       {% endif %}
       <input class="input" type="date" name="date" value="{{ base_date }}" style="min-width:180px;">
       <button class="btn btn-primary" type="submit">Ir</button>
@@ -346,10 +346,10 @@
   <form method="get" action="/app" class="agenda-filter-row">
     <div class="agenda-filter-field">
       <label class="agenda-filter-label">Vista de agenda</label>
-      <select class="input" name="doctor_id">
+      <select class="input" name="doctor_key">
         <option value="">Agenda general del centro</option>
         {% for d in doctors %}
-          <option value="{{ d.id }}" {% if selected_doctor_id == d.id %}selected{% endif %}>
+          <option value="{{ d.key }}" {% if selected_doctor_key == d.key %}selected{% endif %}>
             {{ d.name }}
           </option>
         {% endfor %}
@@ -364,7 +364,7 @@
   <div class="agenda-legend">
     {% for d in doctors %}
       <span class="legend-chip">
-        <span class="legend-dot" style="background:{% if ((d.id - 1) % 10) == 0 %}#0B4DBB{% elif ((d.id - 1) % 10) == 1 %}#0F766E{% elif ((d.id - 1) % 10) == 2 %}#7C3AED{% elif ((d.id - 1) % 10) == 3 %}#C2410C{% elif ((d.id - 1) % 10) == 4 %}#BE123C{% elif ((d.id - 1) % 10) == 5 %}#1D4ED8{% elif ((d.id - 1) % 10) == 6 %}#15803D{% elif ((d.id - 1) % 10) == 7 %}#A21CAF{% elif ((d.id - 1) % 10) == 8 %}#B45309{% else %}#0369A1{% endif %};"></span>
+        <span class="legend-dot" style="background:{{ d.color }};"></span>
         {{ d.name }}
       </span>
     {% endfor %}
@@ -378,7 +378,7 @@
         <div>
           <div class="agenda-day-title">{{ day }}</div>
           <div class="agenda-day-sub">
-            {% if selected_doctor_id %}
+            {% if selected_doctor_key %}
               Agenda filtrada por profesional
             {% else %}
               Agenda general del centro

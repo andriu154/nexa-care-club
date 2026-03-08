@@ -21,6 +21,19 @@ templates = Jinja2Templates(directory="app/templates")
 APP_TZ = ZoneInfo(os.getenv("APP_TIMEZONE", "America/Guayaquil"))
 CIE10_FILE = Path("app/assets/cie10.xlsx")
 
+DOCTOR_CANONICAL = {
+    "1750785220": {
+        "key": "andres",
+        "name": "Dr. Andrés Herrería",
+        "color": "#0B4DBB",
+    },
+    "1312059627": {
+        "key": "yiria",
+        "name": "Dra. Yiria Collantes",
+        "color": "#7C3AED",
+    },
+}
+
 CIE10_SMART_ALIASES = {
     "itu": [
         "infeccion del tracto urinario",
@@ -193,22 +206,95 @@ def _compute_ui_badge(appt: Appointment) -> str:
     return "atrasado"
 
 
-def _doctor_color(doctor_id: int | None) -> str:
-    palette = [
-        "#0B4DBB",
-        "#0F766E",
-        "#7C3AED",
-        "#C2410C",
-        "#BE123C",
-        "#1D4ED8",
-        "#15803D",
-        "#A21CAF",
-        "#B45309",
-        "#0369A1",
-    ]
-    if not doctor_id:
-        return palette[0]
-    return palette[(doctor_id - 1) % len(palette)]
+def _canonical_doctor_info(doctor: Doctor | None):
+    registration = (getattr(doctor, "registration", None) or "").strip()
+    name = (getattr(doctor, "name", None) or "").strip()
+
+    if registration in DOCTOR_CANONICAL:
+        item = DOCTOR_CANONICAL[registration]
+        return {
+            "key": item["key"],
+            "name": item["name"],
+            "color": item["color"],
+            "registration": registration,
+            "doctor_ids": [getattr(doctor, "id", None)] if doctor else [],
+        }
+
+    lowered = name.lower()
+    if "miguel" in lowered or "andres" in lowered or "herrer" in lowered:
+        return {
+            "key": "andres",
+            "name": "Dr. Andrés Herrería",
+            "color": "#0B4DBB",
+            "registration": registration,
+            "doctor_ids": [getattr(doctor, "id", None)] if doctor else [],
+        }
+
+    if "yiria" in lowered or "collantes" in lowered:
+        return {
+            "key": "yiria",
+            "name": "Dra. Yiria Collantes",
+            "color": "#7C3AED",
+            "registration": registration,
+            "doctor_ids": [getattr(doctor, "id", None)] if doctor else [],
+        }
+
+    fallback_id = getattr(doctor, "id", 0) if doctor else 0
+    return {
+        "key": f"doctor_{fallback_id}",
+        "name": name or f"Doctor #{fallback_id}",
+        "color": "#0F766E",
+        "registration": registration,
+        "doctor_ids": [fallback_id] if fallback_id else [],
+    }
+
+
+def _build_dashboard_doctors(doctors: list[Doctor]):
+    merged = {}
+
+    for doctor in doctors:
+        item = _canonical_doctor_info(doctor)
+        key = item["key"]
+
+        if key not in merged:
+            merged[key] = {
+                "key": item["key"],
+                "name": item["name"],
+                "color": item["color"],
+                "doctor_ids": [],
+                "registrations": [],
+            }
+
+        doc_id = getattr(doctor, "id", None)
+        reg = (getattr(doctor, "registration", None) or "").strip()
+
+        if doc_id and doc_id not in merged[key]["doctor_ids"]:
+            merged[key]["doctor_ids"].append(doc_id)
+
+        if reg and reg not in merged[key]["registrations"]:
+            merged[key]["registrations"].append(reg)
+
+    ordered_keys = ["andres", "yiria"]
+    ordered = []
+
+    for k in ordered_keys:
+        if k in merged:
+            ordered.append(merged[k])
+
+    for k in sorted(merged.keys()):
+        if k not in ordered_keys:
+            ordered.append(merged[k])
+
+    return ordered
+
+
+def _appointment_matches_filter(appt: Appointment, selected_doctor_key: str | None) -> bool:
+    if not selected_doctor_key:
+        return True
+
+    doctor = getattr(appt, "doctor", None)
+    info = _canonical_doctor_info(doctor)
+    return info["key"] == selected_doctor_key
 
 
 def _is_editable(enc: Encounter) -> bool:
@@ -452,7 +538,7 @@ def ui_dashboard(
     request: Request,
     db: Session = Depends(get_db),
     date: str | None = None,
-    doctor_id: int | None = None,
+    doctor_key: str | None = None,
 ):
     current_doctor = _require_login(request, db)
     if not current_doctor:
@@ -468,25 +554,30 @@ def ui_dashboard(
     start_dt = datetime(start_date.year, start_date.month, start_date.day, 0, 0, 0)
     end_dt = datetime(end_date.year, end_date.month, end_date.day, 23, 59, 59)
 
-    query = (
+    appts = (
         db.query(Appointment)
         .options(joinedload(Appointment.patient), joinedload(Appointment.doctor))
         .filter(Appointment.start_at >= start_dt)
         .filter(Appointment.start_at <= end_dt)
+        .order_by(Appointment.start_at.asc())
+        .all()
     )
 
-    if doctor_id:
-        query = query.filter(Appointment.doctor_id == doctor_id)
+    doctors_raw = db.query(Doctor).order_by(Doctor.name.asc()).all()
+    doctors = _build_dashboard_doctors(doctors_raw)
 
-    appts = query.order_by(Appointment.start_at.asc()).all()
-
-    doctors = db.query(Doctor).order_by(Doctor.name.asc()).all()
+    selected_doctor_key = (doctor_key or "").strip() or None
+    if selected_doctor_key:
+        appts = [a for a in appts if _appointment_matches_filter(a, selected_doctor_key)]
 
     for a in appts:
         a.can_start_now = _can_start_now(a)
         a.ui_badge = _compute_ui_badge(a)
-        a.doctor_color = _doctor_color(a.doctor_id)
-        a.doctor_name = a.doctor.name if getattr(a, "doctor", None) else f"Doctor #{a.doctor_id}"
+
+        info = _canonical_doctor_info(getattr(a, "doctor", None))
+        a.doctor_color = info["color"]
+        a.doctor_name = info["name"]
+        a.doctor_key = info["key"]
 
     days = {}
     for a in appts:
@@ -510,7 +601,7 @@ def ui_dashboard(
         "ordered_days": ordered_days,
         "days": days,
         "doctors": doctors,
-        "selected_doctor_id": doctor_id,
+        "selected_doctor_key": selected_doctor_key,
     }
 
     html = templates.get_template("dashboard.html").render(**ctx)
