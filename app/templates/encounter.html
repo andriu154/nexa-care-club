@@ -395,15 +395,47 @@
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  function normalizeDxCode(value) {
+    return (value || "")
+      .toString()
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, "")
+      .replace(/\./g, "");
+  }
+
+  function splitDxLine(line) {
+    const raw = (line || "").trim();
+    if (!raw) return { code: "", desc: "" };
+
+    const m = raw.match(/\b([A-TV-Z][0-9]{2}(?:\.[0-9A-Z]{1,4})?)\b/i);
+    if (m) {
+      const code = (m[1] || "").trim().toUpperCase();
+      const desc = raw.replace(m[1], "").replace(/^[\s\-:|•;,.]+|[\s\-:|•;,.]+$/g, "").trim();
+      return { code, desc };
+    }
+
+    const parts = raw.split(" - ");
+    if (parts.length >= 2) {
+      const code = (parts.shift() || "").trim().toUpperCase();
+      const desc = parts.join(" - ").trim();
+      return { code, desc };
+    }
+
+    return { code: "", desc: raw };
+  }
+
   function serializeDxList() {
     const rows = Array.from(dxList.querySelectorAll(".dx-row"));
     const lines = rows.map((row) => {
-      const code = (row.querySelector(".dx-code")?.value || "").trim();
+      const code = (row.querySelector(".dx-code")?.value || "").trim().toUpperCase();
       const desc = (row.querySelector(".dx-desc")?.value || "").trim();
+
       if (!code && !desc) return "";
       if (code && desc) return `${code} - ${desc}`;
       return code || desc;
     }).filter(Boolean);
+
     assessmentHidden.value = lines.join("\n");
   }
 
@@ -416,6 +448,7 @@
   function renderSuggest(box, results, onSelect) {
     if (!box) return;
     box.innerHTML = "";
+
     if (!results || results.length === 0) {
       closeSuggest(box);
       return;
@@ -429,6 +462,7 @@
         <div class="dx-option-code">${item.code}</div>
         <div class="dx-option-desc">${item.description}</div>
       `;
+      btn.addEventListener("mousedown", (e) => e.preventDefault());
       btn.addEventListener("click", () => onSelect(item));
       box.appendChild(btn);
     });
@@ -455,19 +489,22 @@
   }
 
   function addDxRow(code = "", desc = "") {
+    const safeCode = (code || "").replace(/"/g, "&quot;");
+    const safeDesc = (desc || "").replace(/"/g, "&quot;");
+
     const row = document.createElement("div");
     row.className = "dx-row";
     row.innerHTML = `
       <div class="wiz-field">
         <label class="wiz-label">Código CIE-10</label>
-        <input class="input dx-code" type="text" placeholder="Ej: K81.0" value="${code.replace(/"/g, '&quot;')}" ${canEdit ? "" : "disabled"}>
+        <input class="input dx-code" type="text" placeholder="Ej: N39.0" value="${safeCode}" ${canEdit ? "" : "disabled"}>
       </div>
 
       <div class="wiz-field">
         <label class="wiz-label">Buscar o descripción</label>
-        <input class="input dx-search" type="text" placeholder="Escribe código o diagnóstico" value="${desc.replace(/"/g, '&quot;')}" ${canEdit ? "" : "disabled"}>
+        <input class="input dx-search" type="text" placeholder="Escribe código o diagnóstico" value="${safeDesc}" ${canEdit ? "" : "disabled"}>
         <div class="dx-suggest"></div>
-        <input class="input dx-desc" type="hidden" value="${desc.replace(/"/g, '&quot;')}" ${canEdit ? "" : "disabled"}>
+        <input class="input dx-desc" type="hidden" value="${safeDesc}" ${canEdit ? "" : "disabled"}>
       </div>
 
       <button type="button" class="btn btn-danger dx-remove" ${canEdit ? "" : "disabled"}>✕</button>
@@ -488,26 +525,50 @@
     }
 
     function chooseResult(item) {
-      codeInput.value = item.code || "";
+      codeInput.value = (item.code || "").toUpperCase();
       searchInput.value = item.description || "";
       descInput.value = item.description || "";
       closeSuggest(suggestBox);
       syncState();
     }
 
-    async function runLookup(fromValue) {
+    async function runLookup(fromValue, preferredField) {
       const results = await searchCie10(fromValue);
       renderSuggest(suggestBox, results, chooseResult);
+
+      if (!results || results.length === 0) return results;
+
+      const typed = (fromValue || "").trim();
+      const normalizedTypedCode = normalizeDxCode(typed);
+      const normalizedTypedText = typed.toLowerCase();
+
+      let exact = null;
+
+      if (preferredField === "code") {
+        exact = results.find(x => normalizeDxCode(x.code) === normalizedTypedCode);
+      } else if (preferredField === "text") {
+        exact = results.find(x => (x.description || "").trim().toLowerCase() === normalizedTypedText);
+      }
+
+      if (!exact && results.length === 1) {
+        exact = results[0];
+      }
+
+      if (exact) {
+        chooseResult(exact);
+      }
+
+      return results;
     }
 
     codeInput.addEventListener("input", () => {
-      const value = codeInput.value.trim();
+      const value = codeInput.value.trim().toUpperCase();
       clearTimeout(searchTimer);
-      descInput.value = searchInput.value.trim();
+      codeInput.value = value;
       syncState();
 
       if (value.length >= 2) {
-        searchTimer = setTimeout(() => runLookup(value), 250);
+        searchTimer = setTimeout(() => runLookup(value, "code"), 250);
       } else {
         closeSuggest(suggestBox);
       }
@@ -516,11 +577,11 @@
     searchInput.addEventListener("input", () => {
       const value = searchInput.value.trim();
       clearTimeout(searchTimer);
-      descInput.value = searchInput.value.trim();
+      descInput.value = value;
       syncState();
 
       if (value.length >= 2) {
-        searchTimer = setTimeout(() => runLookup(value), 250);
+        searchTimer = setTimeout(() => runLookup(value, "text"), 250);
       } else {
         closeSuggest(suggestBox);
       }
@@ -531,11 +592,50 @@
     });
 
     codeInput.addEventListener("blur", async () => {
-      const value = codeInput.value.trim();
-      if (value.length < 2 || searchInput.value.trim()) return;
+      const value = codeInput.value.trim().toUpperCase();
+      if (value.length < 2) return;
+
       const results = await searchCie10(value);
-      const exact = results.find(x => (x.code || "").toUpperCase() === value.toUpperCase());
-      if (exact) chooseResult(exact);
+      if (!results || results.length === 0) return;
+
+      const wanted = normalizeDxCode(value);
+      let exact = results.find(x => normalizeDxCode(x.code) === wanted);
+
+      if (!exact && results.length === 1) {
+        exact = results[0];
+      }
+
+      if (exact) {
+        chooseResult(exact);
+      }
+    });
+
+    searchInput.addEventListener("blur", async () => {
+      const value = searchInput.value.trim();
+      descInput.value = value;
+      if (value.length < 2) {
+        setTimeout(() => closeSuggest(suggestBox), 150);
+        return;
+      }
+
+      const results = await searchCie10(value);
+      if (!results || results.length === 0) {
+        setTimeout(() => closeSuggest(suggestBox), 150);
+        return;
+      }
+
+      const wanted = value.toLowerCase();
+      let exact = results.find(x => ((x.description || "").trim().toLowerCase() === wanted));
+
+      if (!exact && results.length === 1) {
+        exact = results[0];
+      }
+
+      if (exact) {
+        chooseResult(exact);
+      } else {
+        setTimeout(() => closeSuggest(suggestBox), 150);
+      }
     });
 
     removeBtn.addEventListener("click", () => {
@@ -548,26 +648,22 @@
 
   function bootstrapDx() {
     const raw = (assessmentHidden.value || "").trim();
+
     if (!raw) {
       addDxRow("", "");
       return;
     }
 
     const lines = raw.split("\n").map(x => x.trim()).filter(Boolean);
+
     if (lines.length === 0) {
       addDxRow("", "");
       return;
     }
 
     lines.forEach((line) => {
-      const parts = line.split(" - ");
-      if (parts.length >= 2) {
-        const code = parts.shift();
-        const desc = parts.join(" - ");
-        addDxRow(code, desc);
-      } else {
-        addDxRow("", line);
-      }
+      const parsed = splitDxLine(line);
+      addDxRow(parsed.code, parsed.desc);
     });
   }
 

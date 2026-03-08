@@ -16,7 +16,6 @@ from .auth import get_logged_doctor
 router = APIRouter(tags=["Appointments UI"])
 templates = Jinja2Templates(directory="app/templates")
 
-# ✅ Zona horaria de la app (cámbiala si aplica)
 APP_TZ = ZoneInfo(os.getenv("APP_TIMEZONE", "America/Guayaquil"))
 
 
@@ -79,7 +78,6 @@ def _overlaps(
 
 
 def _can_start_now(appt: Appointment) -> bool:
-    # asumimos que start_at/end_at guardan "hora local" (naive)
     now_local_naive = _now_local().replace(tzinfo=None)
     start_window = appt.start_at - timedelta(minutes=15)
     end_window = appt.end_at + timedelta(minutes=30)
@@ -87,16 +85,12 @@ def _can_start_now(appt: Appointment) -> bool:
 
 
 def _is_modal_request(request: Request, modal_param: str | int | None) -> bool:
-    # modal=1 o header X-Requested-With=fetch (cuando viene del JS del modal)
     if str(modal_param or "").strip() == "1":
         return True
     hdr = (request.headers.get("X-Requested-With") or "").lower()
     return hdr == "fetch"
 
 
-# =========================
-# FORM: NUEVA CITA
-# =========================
 @router.get("/app/appointments/new", response_class=HTMLResponse)
 def new_appointment_form(
     request: Request,
@@ -133,9 +127,6 @@ def new_appointment_form(
     return templates.TemplateResponse("appointment_new.html", ctx)
 
 
-# =========================
-# QUICK CREATE PACIENTE
-# =========================
 @router.post("/app/patients/quick-create")
 def quick_create_patient(
     request: Request,
@@ -191,9 +182,6 @@ def quick_create_patient(
     )
 
 
-# =========================
-# CREAR CITA
-# =========================
 @router.post("/app/appointments/new")
 def create_appointment(
     request: Request,
@@ -216,14 +204,12 @@ def create_appointment(
 
     try:
         hh, mm = time.split(":")
-        # guardamos como naive pero interpretado como hora local
         start_at = datetime(d.year, d.month, d.day, int(hh), int(mm))
     except Exception:
         raise HTTPException(status_code=400, detail="Hora inválida")
 
     now_local_naive = _now_local().replace(tzinfo=None)
 
-    # ✅ NO pasado usando hora local
     if start_at < now_local_naive - timedelta(minutes=1):
         raise HTTPException(status_code=400, detail="No puedes agendar una cita en el pasado.")
 
@@ -251,13 +237,11 @@ def create_appointment(
     )
     db.add(appt)
     db.commit()
+    db.refresh(appt)
 
     return RedirectResponse(url=f"/app?date={d.isoformat()}", status_code=HTTP_303_SEE_OTHER)
 
 
-# =========================
-# CANCELAR
-# =========================
 @router.post("/app/appointments/{appointment_id}/cancel")
 def cancel_appointment(
     appointment_id: int,
@@ -269,12 +253,14 @@ def cancel_appointment(
     if not current_doctor:
         return _redirect_login()
 
-    appt = db.query(Appointment).filter(Appointment.id == appointment_id).first()
+    appt = (
+        db.query(Appointment)
+        .filter(Appointment.id == appointment_id)
+        .filter(Appointment.doctor_id == current_doctor.id)
+        .first()
+    )
     if not appt:
         raise HTTPException(status_code=404, detail="Cita no encontrada")
-
-    if appt.doctor_id != current_doctor.id:
-        raise HTTPException(status_code=403, detail="No autorizado")
 
     appt.status = "canceled"
     appt.updated_at = _now_local().replace(tzinfo=None)
@@ -284,9 +270,6 @@ def cancel_appointment(
     return RedirectResponse(url=f"/app?date={d.isoformat()}", status_code=HTTP_303_SEE_OTHER)
 
 
-# =========================
-# REAGENDAR
-# =========================
 @router.post("/app/appointments/{appointment_id}/reschedule")
 def reschedule_appointment(
     appointment_id: int,
@@ -300,12 +283,14 @@ def reschedule_appointment(
     if not current_doctor:
         return _redirect_login()
 
-    appt = db.query(Appointment).filter(Appointment.id == appointment_id).first()
+    appt = (
+        db.query(Appointment)
+        .filter(Appointment.id == appointment_id)
+        .filter(Appointment.doctor_id == current_doctor.id)
+        .first()
+    )
     if not appt:
         raise HTTPException(status_code=404, detail="Cita no encontrada")
-
-    if appt.doctor_id != current_doctor.id:
-        raise HTTPException(status_code=403, detail="No autorizado")
 
     d = _parse_date(date)
     if d is None:
@@ -338,9 +323,6 @@ def reschedule_appointment(
     return RedirectResponse(url=f"/app?date={d.isoformat()}", status_code=HTTP_303_SEE_OTHER)
 
 
-# =========================
-# START ENCOUNTER
-# =========================
 @router.post("/app/appointments/{appointment_id}/start")
 def start_encounter_from_appointment(
     appointment_id: int,
@@ -351,12 +333,14 @@ def start_encounter_from_appointment(
     if not current_doctor:
         return _redirect_login()
 
-    appt = db.query(Appointment).filter(Appointment.id == appointment_id).first()
+    appt = (
+        db.query(Appointment)
+        .filter(Appointment.id == appointment_id)
+        .filter(Appointment.doctor_id == current_doctor.id)
+        .first()
+    )
     if not appt:
         raise HTTPException(status_code=404, detail="Cita no encontrada")
-
-    if appt.doctor_id != current_doctor.id:
-        raise HTTPException(status_code=403, detail="No autorizado")
 
     if appt.status == "canceled":
         raise HTTPException(status_code=400, detail="La cita está cancelada")
@@ -366,11 +350,25 @@ def start_encounter_from_appointment(
 
     if appt.status == "completed":
         if appt.encounter_id:
-            return RedirectResponse(url=f"/app/encounters/{appt.encounter_id}", status_code=HTTP_303_SEE_OTHER)
+            existing_completed = db.query(Encounter).filter(Encounter.id == appt.encounter_id).first()
+            if existing_completed:
+                return RedirectResponse(
+                    url=f"/app/encounters/{existing_completed.id}",
+                    status_code=HTTP_303_SEE_OTHER,
+                )
         raise HTTPException(status_code=400, detail="La cita ya fue atendida")
 
     if appt.encounter_id:
-        return RedirectResponse(url=f"/app/encounters/{appt.encounter_id}", status_code=HTTP_303_SEE_OTHER)
+        existing_enc = db.query(Encounter).filter(Encounter.id == appt.encounter_id).first()
+        if existing_enc:
+            return RedirectResponse(
+                url=f"/app/encounters/{existing_enc.id}",
+                status_code=HTTP_303_SEE_OTHER,
+            )
+        appt.encounter_id = None
+        appt.updated_at = _now_local().replace(tzinfo=None)
+        db.commit()
+        db.refresh(appt)
 
     if not _can_start_now(appt):
         raise HTTPException(
@@ -384,7 +382,7 @@ def start_encounter_from_appointment(
         patient_id=appt.patient_id,
         doctor_id=current_doctor.id,
         visit_type="Ambulatorio",
-        chief_complaint_short=(appt.reason or "")[:120] if appt.reason else "",
+        chief_complaint_short=((appt.reason or "").strip())[:120],
         created_at=now_local_naive,
         ended_at=None,
         is_signed=False,
@@ -394,15 +392,13 @@ def start_encounter_from_appointment(
     db.refresh(enc)
 
     appt.encounter_id = enc.id
+    appt.status = "confirmed"
     appt.updated_at = now_local_naive
     db.commit()
 
     return RedirectResponse(url=f"/app/encounters/{enc.id}", status_code=HTTP_303_SEE_OTHER)
 
 
-# =========================
-# NO SHOW
-# =========================
 @router.post("/app/appointments/{appointment_id}/no-show")
 def mark_no_show(
     appointment_id: int,
@@ -415,12 +411,14 @@ def mark_no_show(
     if not current_doctor:
         return _redirect_login()
 
-    appt = db.query(Appointment).filter(Appointment.id == appointment_id).first()
+    appt = (
+        db.query(Appointment)
+        .filter(Appointment.id == appointment_id)
+        .filter(Appointment.doctor_id == current_doctor.id)
+        .first()
+    )
     if not appt:
         raise HTTPException(status_code=404, detail="Cita no encontrada")
-
-    if appt.doctor_id != current_doctor.id:
-        raise HTTPException(status_code=403, detail="No autorizado")
 
     if appt.status == "completed":
         raise HTTPException(status_code=400, detail="La cita ya fue atendida")
