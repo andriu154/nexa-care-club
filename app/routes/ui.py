@@ -657,15 +657,44 @@ def ui_start_appointment(appointment_id: int, request: Request, db: Session = De
 
 
 @router.get("/patients", response_class=HTMLResponse)
-def ui_patients(request: Request, db: Session = Depends(get_db)):
+def ui_patients(
+    request: Request,
+    db: Session = Depends(get_db),
+    q: str | None = None,
+):
     current_doctor = _require_login(request, db)
     if not current_doctor:
         return _redirect_login()
 
-    patients = db.query(Patient).order_by(Patient.id.desc()).all()
+    search = (q or "").strip()
+
+    query = db.query(Patient)
+
+    if search:
+        like = f"%{search}%"
+        query = query.filter(
+            (Patient.full_name.ilike(like)) |
+            (Patient.cedula.ilike(like)) |
+            (Patient.phone.ilike(like)) |
+            (Patient.qr_code.ilike(like))
+        )
+
+    patients = query.order_by(Patient.id.desc()).all()
+
+    total_patients = db.query(Patient).count()
+    active_patients = db.query(Patient).filter(Patient.status == "Activo").count()
+
     return templates.TemplateResponse(
         "patients.html",
-        {"request": request, "current_doctor": current_doctor, "patients": patients},
+        {
+            "request": request,
+            "current_doctor": current_doctor,
+            "patients": patients,
+            "search": search,
+            "total_patients": total_patients,
+            "active_patients": active_patients,
+            "result_count": len(patients),
+        },
     )
 
 

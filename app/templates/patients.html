@@ -5,29 +5,29 @@
 {% endblock %}
 
 {% block actions %}
-  <a class="btn btn-outline" href="/docs" target="_blank" rel="noopener">Abrir /docs</a>
+  <a class="btn btn-primary" href="/docs" target="_blank" rel="noopener">
+    API /docs
+  </a>
 {% endblock %}
 
 {% block content %}
 
 <style>
-  .patients-layout{
+  .patients-shell{
     display:grid;
-    grid-template-columns:minmax(0, 2.2fr) minmax(320px, .95fr);
+    grid-template-columns:minmax(0, 2.1fr) minmax(320px, .9fr);
     gap:18px;
   }
 
-  .patients-card,
-  .patients-side{
-    background:#ffffff;
+  .patients-card,.patients-side{
+    background:#fff;
     border:1px solid #dbe6f3;
     border-radius:22px;
     box-shadow:0 10px 28px rgba(24,39,75,.10);
     overflow:hidden;
   }
 
-  .patients-head,
-  .patients-side-head{
+  .patients-head,.patients-side-head{
     padding:18px 20px;
     border-bottom:1px solid #e2ebf5;
     background:linear-gradient(180deg,#f8fbff 0%, #eff6ff 100%);
@@ -45,24 +45,38 @@
     margin-top:4px;
   }
 
-  .patients-body,
-  .patients-side-body{
+  .patients-body,.patients-side-body{
     padding:18px;
   }
 
   .patients-toolbar{
     display:flex;
     justify-content:space-between;
-    align-items:center;
-    gap:10px;
+    align-items:flex-end;
+    gap:12px;
     flex-wrap:wrap;
     margin-bottom:16px;
   }
 
-  .patients-search{
-    min-width:280px;
-    max-width:420px;
+  .patients-search-form{
+    display:flex;
+    gap:10px;
+    align-items:flex-end;
+    flex-wrap:wrap;
     width:100%;
+  }
+
+  .patients-search-box{
+    min-width:280px;
+    flex:1 1 360px;
+    display:grid;
+    gap:6px;
+  }
+
+  .patients-label{
+    font-size:12px;
+    font-weight:800;
+    color:#334155;
   }
 
   .patients-stats{
@@ -71,32 +85,32 @@
     flex-wrap:wrap;
   }
 
-  .stat-chip{
+  .patients-stat{
     display:inline-flex;
     align-items:center;
     gap:8px;
     padding:9px 12px;
     border-radius:999px;
-    background:#f8fbff;
     border:1px solid #dbe6f3;
+    background:#f8fbff;
     color:#334155;
     font-size:12px;
     font-weight:800;
   }
 
-  .patients-grid{
+  .patients-list{
     display:grid;
     gap:12px;
   }
 
-  .patient-item{
+  .patient-card{
     border:1px solid #dbe6f3;
+    background:#fff;
     border-radius:18px;
-    background:#ffffff;
-    box-shadow:0 8px 18px rgba(24,39,75,.06);
     padding:16px;
     display:grid;
     gap:12px;
+    box-shadow:0 8px 18px rgba(24,39,75,.06);
   }
 
   .patient-top{
@@ -115,9 +129,9 @@
   }
 
   .patient-id{
+    margin-top:4px;
     font-size:12px;
     color:#64748b;
-    margin-top:4px;
     font-weight:700;
   }
 
@@ -129,19 +143,25 @@
     border-radius:999px;
     font-size:11px;
     font-weight:800;
+    width:fit-content;
     border:1px solid #bdeccf;
     background:#ecfff5;
     color:#087443;
-    width:fit-content;
   }
 
-  .patient-meta{
+  .patient-status.inactive{
+    border-color:#d1d5db;
+    background:#f3f4f6;
+    color:#4b5563;
+  }
+
+  .patient-grid{
     display:grid;
     grid-template-columns:repeat(4, minmax(0, 1fr));
     gap:10px;
   }
 
-  .meta-box{
+  .patient-box{
     border:1px solid #e2ebf5;
     border-radius:14px;
     background:#fbfdff;
@@ -150,7 +170,7 @@
     gap:6px;
   }
 
-  .meta-label{
+  .patient-box-label{
     font-size:11px;
     font-weight:800;
     color:#64748b;
@@ -158,7 +178,7 @@
     letter-spacing:.02em;
   }
 
-  .meta-value{
+  .patient-box-value{
     font-size:13px;
     font-weight:700;
     color:#1f2937;
@@ -181,116 +201,138 @@
     font-size:13px;
   }
 
-  .api-chips{
-    display:flex;
-    gap:8px;
-    flex-wrap:wrap;
-  }
-
-  .api-chip{
-    display:inline-flex;
-    align-items:center;
-    padding:8px 10px;
-    border-radius:999px;
-    background:#f8fbff;
-    border:1px solid #dbe6f3;
-    color:#334155;
-    font-size:11px;
-    font-weight:800;
-  }
-
-  .patients-note{
+  .side-note{
     border:1px solid #dbe6f3;
     background:#f8fbff;
     color:#475569;
     border-radius:16px;
     padding:14px;
     font-size:13px;
+    line-height:1.55;
+  }
+
+  .side-list{
+    display:grid;
+    gap:10px;
+    margin-top:14px;
+  }
+
+  .side-item{
+    border:1px solid #e2ebf5;
+    border-radius:14px;
+    background:#fff;
+    padding:12px;
+  }
+
+  .side-item-title{
+    font-size:13px;
+    font-weight:800;
+    color:#163c7a;
+  }
+
+  .side-item-text{
+    margin-top:6px;
+    font-size:12px;
+    color:#6b7280;
     line-height:1.5;
   }
 
   @media (max-width: 1200px){
-    .patients-layout{
+    .patients-shell{
       grid-template-columns:1fr;
     }
   }
 
   @media (max-width: 900px){
-    .patient-meta{
+    .patient-grid{
       grid-template-columns:1fr 1fr;
     }
   }
 
   @media (max-width: 640px){
-    .patient-meta{
+    .patient-grid{
       grid-template-columns:1fr;
     }
   }
 </style>
 
-<div class="patients-layout">
+<div class="patients-shell">
   <section class="patients-card">
     <div class="patients-head">
-      <div class="patients-title">Listado de pacientes</div>
-      <div class="patients-sub">Accede al historial, timeline y PDFs clínicos desde un panel más limpio.</div>
+      <div class="patients-title">Pacientes registrados</div>
+      <div class="patients-sub">Busca por nombre, cédula, teléfono o QR y abre la ficha clínica en un clic.</div>
     </div>
 
     <div class="patients-body">
       <div class="patients-toolbar">
-        <input
-          class="input patients-search"
-          id="patientSearch"
-          type="text"
-          placeholder="Buscar por nombre, cédula, QR o teléfono..."
-        >
+        <form method="get" action="/app/patients" class="patients-search-form">
+          <div class="patients-search-box">
+            <label class="patients-label">Buscar paciente</label>
+            <input
+              class="input"
+              type="text"
+              name="q"
+              value="{{ search }}"
+              placeholder="Ej: Andrés, 0912345678, 099..., QR-AB12..."
+            >
+          </div>
+
+          <button class="btn btn-primary" type="submit">Buscar</button>
+
+          {% if search %}
+            <a class="btn btn-outline" href="/app/patients">Limpiar</a>
+          {% endif %}
+        </form>
 
         <div class="patients-stats">
-          <span class="stat-chip">Total: {{ patients|length }}</span>
-          <span class="stat-chip">Centro: NexaCenter</span>
+          <span class="patients-stat">Total: {{ total_patients }}</span>
+          <span class="patients-stat">Activos: {{ active_patients }}</span>
+          <span class="patients-stat">Resultados: {{ result_count }}</span>
         </div>
       </div>
 
-      <div class="patients-grid" id="patientsGrid">
+      <div class="patients-list">
         {% if patients|length == 0 %}
           <div class="patients-empty">
-            Aún no hay pacientes registrados.
+            {% if search %}
+              No se encontraron pacientes con ese criterio de búsqueda.
+            {% else %}
+              Aún no hay pacientes registrados.
+            {% endif %}
           </div>
         {% else %}
           {% for p in patients %}
-            <article
-              class="patient-item patient-row"
-              data-search="{{ (p.full_name or '')|lower }} {{ (p.cedula or '')|lower }} {{ (p.qr_code or '')|lower }} {{ (p.phone or '')|lower }}"
-            >
+            <article class="patient-card">
               <div class="patient-top">
                 <div>
                   <div class="patient-name">{{ p.full_name }}</div>
                   <div class="patient-id">Paciente ID #{{ p.id }}</div>
                 </div>
 
-                <div class="patient-status">
+                <div class="patient-status {% if (p.status or 'Activo') != 'Activo' %}inactive{% endif %}">
                   {{ p.status if p.status else "Activo" }}
                 </div>
               </div>
 
-              <div class="patient-meta">
-                <div class="meta-box">
-                  <div class="meta-label">Cédula</div>
-                  <div class="meta-value">{{ p.cedula if p.cedula else "—" }}</div>
+              <div class="patient-grid">
+                <div class="patient-box">
+                  <div class="patient-box-label">Cédula</div>
+                  <div class="patient-box-value">{{ p.cedula if p.cedula else "—" }}</div>
                 </div>
 
-                <div class="meta-box">
-                  <div class="meta-label">Teléfono</div>
-                  <div class="meta-value">{{ p.phone if p.phone else "—" }}</div>
+                <div class="patient-box">
+                  <div class="patient-box-label">Teléfono</div>
+                  <div class="patient-box-value">{{ p.phone if p.phone else "—" }}</div>
                 </div>
 
-                <div class="meta-box">
-                  <div class="meta-label">QR</div>
-                  <div class="meta-value">{{ p.qr_code if p.qr_code else "—" }}</div>
+                <div class="patient-box">
+                  <div class="patient-box-label">Código QR</div>
+                  <div class="patient-box-value">{{ p.qr_code if p.qr_code else "—" }}</div>
                 </div>
 
-                <div class="meta-box">
-                  <div class="meta-label">Sesiones</div>
-                  <div class="meta-value">{{ p.completed_sessions }}/{{ p.total_sessions }}</div>
+                <div class="patient-box">
+                  <div class="patient-box-label">Sesiones</div>
+                  <div class="patient-box-value">{{ p.completed_sessions }}/{{ p.total_sessions }}</div>
                 </div>
               </div>
 
@@ -311,42 +353,39 @@
 
   <aside class="patients-side">
     <div class="patients-side-head">
-      <div class="patients-title">Tip rápido</div>
-      <div class="patients-sub">Crea pacientes desde /docs y luego gestiona todo desde aquí.</div>
+      <div class="patients-title">Búsqueda inteligente</div>
+      <div class="patients-sub">Tu base ya es persistente en PostgreSQL.</div>
     </div>
 
     <div class="patients-side-body">
-      <div class="api-chips" style="margin-bottom:14px;">
-        <span class="api-chip">POST /patients — full_name</span>
-        <span class="api-chip">POST /encounters — patient_id</span>
-        <span class="api-chip">PUT /encounters/{id}/note</span>
-        <span class="api-chip">GET /patients/{id}/history/pdf</span>
+      <div class="side-note">
+        Todo paciente nuevo que registres queda guardado en la base de datos del sistema y seguirá disponible al volver a iniciar sesión, incluso después de nuevos deploys.
       </div>
 
-      <div class="patients-note">
-        Los pacientes que registres aquí o por API quedan guardados en la base de datos.  
-        Si estás usando <strong>Postgres en Render</strong>, seguirán disponibles aunque cierres sesión o reinicies el servicio.
+      <div class="side-list">
+        <div class="side-item">
+          <div class="side-item-title">Puedes buscar por</div>
+          <div class="side-item-text">
+            Nombre del paciente, cédula, teléfono o código QR.
+          </div>
+        </div>
+
+        <div class="side-item">
+          <div class="side-item-title">Accesos rápidos</div>
+          <div class="side-item-text">
+            Desde aquí puedes abrir la ficha clínica o descargar el PDF consolidado del historial.
+          </div>
+        </div>
+
+        <div class="side-item">
+          <div class="side-item-title">Persistencia</div>
+          <div class="side-item-text">
+            NexaCenter ya está trabajando sobre PostgreSQL en Render, así que los registros ya no dependen de SQLite temporal.
+          </div>
+        </div>
       </div>
     </div>
   </aside>
 </div>
-
-<script>
-(function() {
-  const input = document.getElementById("patientSearch");
-  const rows = Array.from(document.querySelectorAll(".patient-row"));
-
-  if (!input) return;
-
-  input.addEventListener("input", () => {
-    const q = (input.value || "").trim().toLowerCase();
-
-    rows.forEach((row) => {
-      const haystack = row.getAttribute("data-search") || "";
-      row.style.display = haystack.includes(q) ? "" : "none";
-    });
-  });
-})();
-</script>
 
 {% endblock %}
