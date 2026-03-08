@@ -279,6 +279,54 @@ def ui_dashboard(request: Request, db: Session = Depends(get_db), date: str | No
     return HTMLResponse(html)
 
 
+@router.post("/appointments/{appointment_id}/start")
+def ui_start_appointment(appointment_id: int, request: Request, db: Session = Depends(get_db)):
+    current_doctor = _require_login(request, db)
+    if not current_doctor:
+        return _redirect_login()
+
+    appt = (
+        db.query(Appointment)
+        .filter(Appointment.id == appointment_id)
+        .filter(Appointment.doctor_id == current_doctor.id)
+        .first()
+    )
+    if not appt:
+        raise HTTPException(status_code=404, detail="Cita no encontrada")
+
+    if appt.status in ["canceled", "no_show", "completed"]:
+        raise HTTPException(status_code=400, detail="La cita no puede iniciarse")
+
+    if appt.encounter_id:
+        existing_enc = db.query(Encounter).filter(Encounter.id == appt.encounter_id).first()
+        if existing_enc:
+            return RedirectResponse(url=f"/app/encounters/{existing_enc.id}", status_code=302)
+        appt.encounter_id = None
+        db.commit()
+
+    patient = db.query(Patient).filter(Patient.id == appt.patient_id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Paciente no encontrado")
+
+    enc = Encounter(
+        patient_id=appt.patient_id,
+        doctor_id=current_doctor.id,
+        visit_type="Ambulatorio",
+        chief_complaint_short=(appt.reason or "").strip()[:120],
+        created_at=datetime.utcnow(),
+        ended_at=None,
+        is_signed=False,
+    )
+    db.add(enc)
+    db.commit()
+    db.refresh(enc)
+
+    appt.encounter_id = enc.id
+    db.commit()
+
+    return RedirectResponse(url=f"/app/encounters/{enc.id}", status_code=302)
+
+
 @router.get("/patients", response_class=HTMLResponse)
 def ui_patients(request: Request, db: Session = Depends(get_db)):
     current_doctor = _require_login(request, db)
