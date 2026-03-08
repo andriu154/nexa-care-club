@@ -41,7 +41,18 @@ pwd_context = CryptContext(
 )
 
 
+def _is_sqlite_engine() -> bool:
+    try:
+        return engine.dialect.name == "sqlite"
+    except Exception:
+        return False
+
+
 def ensure_sqlite_schema():
+    if not _is_sqlite_engine():
+        print("ℹ️ Base de datos actual: no es SQLite. Se omiten migraciones SQLite.")
+        return
+
     try:
         with engine.begin() as conn:
             # doctors
@@ -145,12 +156,12 @@ def seed_default_doctors_if_enabled():
         db.close()
 
 
-# ✅ init
+# init
 Base.metadata.create_all(bind=engine)
 ensure_sqlite_schema()
 seed_default_doctors_if_enabled()
 
-# ✅ API
+# API
 app.include_router(auth_router)
 app.include_router(doctors_router)
 app.include_router(patients_router)
@@ -162,7 +173,7 @@ app.include_router(clinical_notes_router)
 app.include_router(pdf_router)
 app.include_router(history_router)
 
-# ✅ UI (DEBE QUEDAR ASÍ)
+# UI
 app.include_router(ui_router)
 app.include_router(appointments_ui_router)
 
