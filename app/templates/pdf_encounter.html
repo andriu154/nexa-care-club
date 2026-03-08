@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <style>
+    @page {
+      size: A4;
+      margin: 22mm 18mm 22mm 18mm;
+    }
+
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 12px;
+      color: #1f2937;
+      margin: 0;
+      padding: 0;
+    }
+
+    .page {
+      position: relative;
+    }
+
+    .watermark {
+      position: fixed;
+      top: 42%;
+      left: 10%;
+      font-size: 64px;
+      color: rgba(11, 77, 187, 0.08);
+      transform: rotate(-28deg);
+      font-weight: bold;
+      letter-spacing: 2px;
+      z-index: 0;
+    }
+
+    .header {
+      background: #eaf2ff;
+      border-radius: 18px;
+      padding: 18px 20px;
+      margin-bottom: 16px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .header-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .header-table td {
+      vertical-align: middle;
+    }
+
+    .logo {
+      max-width: 120px;
+      max-height: 48px;
+    }
+
+    .title {
+      text-align: right;
+      font-size: 24px;
+      font-weight: 700;
+      color: #0b4dbb;
+    }
+
+    .subtitle {
+      text-align: right;
+      font-size: 11px;
+      color: #6b7280;
+      margin-top: 4px;
+    }
+
+    .chips {
+      margin-bottom: 14px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .chip-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 8px 0;
+      margin-left: -8px;
+      margin-right: -8px;
+    }
+
+    .chip {
+      background: #ffffff;
+      border: 1px solid #d9e3f0;
+      border-radius: 12px;
+      padding: 10px 12px;
+    }
+
+    .chip-label {
+      font-size: 9px;
+      font-weight: bold;
+      color: #6b7280;
+      margin-bottom: 2px;
+    }
+
+    .chip-value {
+      font-size: 10px;
+      color: #1f2937;
+    }
+
+    .card {
+      border: 1px solid #d9e3f0;
+      border-radius: 14px;
+      overflow: hidden;
+      margin-bottom: 12px;
+      background: #ffffff;
+      position: relative;
+      z-index: 1;
+    }
+
+    .card-title {
+      background: #eaf2ff;
+      color: #0b4dbb;
+      font-size: 13px;
+      font-weight: bold;
+      padding: 10px 14px;
+    }
+
+    .card-body {
+      padding: 12px 14px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    .meta-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .meta-table td {
+      padding: 6px 8px;
+      vertical-align: top;
+      font-size: 11px;
+    }
+
+    .meta-label {
+      width: 140px;
+      color: #6b7280;
+      font-weight: bold;
+    }
+
+    .vitals-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 8px;
+    }
+
+    .vital-box {
+      border: 1px solid #d9e3f0;
+      background: #f8fbff;
+      border-radius: 10px;
+      padding: 8px 10px;
+      text-align: center;
+    }
+
+    .vital-label {
+      font-size: 9px;
+      font-weight: bold;
+      color: #6b7280;
+      margin-bottom: 4px;
+    }
+
+    .vital-value {
+      font-size: 11px;
+      color: #1f2937;
+    }
+
+    .signature-wrap {
+      border: 1px solid #d9e3f0;
+      border-radius: 14px;
+      overflow: hidden;
+      margin-top: 14px;
+      background: #ffffff;
+      position: relative;
+      z-index: 1;
+    }
+
+    .signature-title {
+      background: #eaf2ff;
+      color: #0b4dbb;
+      font-size: 13px;
+      font-weight: bold;
+      padding: 10px 14px;
+    }
+
+    .signature-body {
+      padding: 14px;
+    }
+
+    .signature-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .signature-table td {
+      vertical-align: top;
+      padding: 6px 8px;
+    }
+
+    .sign-line {
+      margin-top: 18px;
+      border-top: 1px solid #6b7280;
+      width: 260px;
+      padding-top: 6px;
+    }
+
+    .stamp-box {
+      width: 170px;
+      height: 62px;
+      border: 1px solid #d9e3f0;
+      border-radius: 10px;
+      background: #f8fbff;
+      text-align: center;
+      line-height: 62px;
+      font-size: 10px;
+      color: #6b7280;
+      margin-left: auto;
+    }
+
+    .qr-box {
+      width: 120px;
+      text-align: center;
+      margin-left: auto;
+      border: 1px solid #d9e3f0;
+      border-radius: 10px;
+      background: #f8fbff;
+      padding: 8px;
+      font-size: 10px;
+      color: #6b7280;
+    }
+
+    .footer {
+      margin-top: 16px;
+      font-size: 9px;
+      color: #6b7280;
+      text-align: right;
+      position: relative;
+      z-index: 1;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="watermark">NEXACENTER</div>
+
+    <div class="header">
+      <table class="header-table">
+        <tr>
+          <td>
+            <img src="{{ request.url_for('static', path='logo.png') }}" class="logo">
+          </td>
+          <td>
+            <div class="title">Resumen Clínico</div>
+            <div class="subtitle">Atención #{{ enc.id }}</div>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="chips">
+      <table class="chip-table">
+        <tr>
+          <td>
+            <div class="chip">
+              <div class="chip-label">Documento</div>
+              <div class="chip-value">{{ now }}</div>
+            </div>
+          </td>
+          <td>
+            <div class="chip">
+              <div class="chip-label">Fecha atención</div>
+              <div class="chip-value">{{ enc.created_at }}</div>
+            </div>
+          </td>
+          <td>
+            <div class="chip">
+              <div class="chip-label">Estado</div>
+              <div class="chip-value">{% if enc.ended_at %}Cerrada{% else %}Abierta{% endif %}</div>
+            </div>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Datos generales</div>
+      <div class="card-body">
+        <table class="meta-table">
+          <tr><td class="meta-label">Centro</td><td>NexaCenter</td></tr>
+          <tr><td class="meta-label">Paciente</td><td>{{ patient.full_name }}</td></tr>
+          <tr><td class="meta-label">Médico tratante</td><td>{{ doc.name }}</td></tr>
+          <tr><td class="meta-label">Especialidad</td><td>{{ doc.specialty if doc and doc.specialty else "-" }}</td></tr>
+          <tr><td class="meta-label">Registro</td><td>{{ doc.registration if doc and doc.registration else "-" }}</td></tr>
+          <tr><td class="meta-label">Tipo de consulta</td><td>{{ enc.visit_type if enc.visit_type else "-" }}</td></tr>
+          <tr><td class="meta-label">Motivo corto</td><td>{{ enc.chief_complaint_short if enc.chief_complaint_short else "-" }}</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Motivo de consulta</div>
+      <div class="card-body">{{ note.chief_complaint if note and note.chief_complaint else "-" }}</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Enfermedad actual</div>
+      <div class="card-body">{{ note.hpi if note and note.hpi else "-" }}</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Signos vitales</div>
+      <div class="card-body">
+        <table class="vitals-table">
+          <tr>
+            <td><div class="vital-box"><div class="vital-label">TA</div><div class="vital-value">{% if note and (note.ta_sys or note.ta_dia) %}{{ note.ta_sys if note.ta_sys else "" }}/{{ note.ta_dia if note.ta_dia else "" }}{% else %}-{% endif %}</div></div></td>
+            <td><div class="vital-box"><div class="vital-label">FC</div><div class="vital-value">{{ note.hr if note and note.hr else "-" }}</div></div></td>
+            <td><div class="vital-box"><div class="vital-label">FR</div><div class="vital-value">{{ note.rr if note and note.rr else "-" }}</div></div></td>
+            <td><div class="vital-box"><div class="vital-label">SpO2</div><div class="vital-value">{{ note.spo2 if note and note.spo2 else "-" }}</div></div></td>
+            <td><div class="vital-box"><div class="vital-label">Temp</div><div class="vital-value">{{ note.temp if note and note.temp else "-" }}</div></div></td>
+          </tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Examen físico</div>
+      <div class="card-body">{{ note.physical_exam if note and note.physical_exam else "-" }}</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Exámenes complementarios</div>
+      <div class="card-body">{{ note.complementary_tests if note and note.complementary_tests else "-" }}</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Impresión diagnóstica</div>
+      <div class="card-body">{{ note.assessment_dx if note and note.assessment_dx else "-" }}</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Prescripción / Plan</div>
+      <div class="card-body">{{ note.plan_treatment if note and note.plan_treatment else "-" }}</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Indicaciones y signos de alarma</div>
+      <div class="card-body">{{ note.indications_alarm_signs if note and note.indications_alarm_signs else "-" }}</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Seguimiento</div>
+      <div class="card-body">{{ note.follow_up if note and note.follow_up else "-" }}</div>
+    </div>
+
+    <div class="signature-wrap">
+      <div class="signature-title">Validación profesional</div>
+      <div class="signature-body">
+        <table class="signature-table">
+          <tr>
+            <td>
+              <div style="font-size:11px;color:#6b7280;">Firma del profesional</div>
+              <div class="sign-line">
+                <strong>{{ doc.name }}</strong><br>
+                Registro profesional: {{ doc.registration if doc and doc.registration else "-" }}
+              </div>
+            </td>
+            <td style="width:210px;">
+              <div style="font-size:11px;color:#6b7280;margin-bottom:8px;text-align:right;">Sello profesional</div>
+              <div class="stamp-box">Colocar sello aquí</div>
+            </td>
+            <td style="width:150px;">
+              <div style="font-size:11px;color:#6b7280;margin-bottom:8px;text-align:right;">QR de validación</div>
+              <div class="qr-box">Integración QR disponible en versión ReportLab</div>
+            </td>
+          </tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="footer">
+      Documento clínico confidencial - NexaCenter
+    </div>
+  </div>
+</body>
+</html>
