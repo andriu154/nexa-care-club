@@ -193,6 +193,24 @@ def _compute_ui_badge(appt: Appointment) -> str:
     return "atrasado"
 
 
+def _doctor_color(doctor_id: int | None) -> str:
+    palette = [
+        "#0B4DBB",
+        "#0F766E",
+        "#7C3AED",
+        "#C2410C",
+        "#BE123C",
+        "#1D4ED8",
+        "#15803D",
+        "#A21CAF",
+        "#B45309",
+        "#0369A1",
+    ]
+    if not doctor_id:
+        return palette[0]
+    return palette[(doctor_id - 1) % len(palette)]
+
+
 def _is_editable(enc: Encounter) -> bool:
     if enc.ended_at is None:
         return True
@@ -430,7 +448,12 @@ def ui_cie10_search(
 
 @router.get("", response_class=HTMLResponse)
 @router.get("/", response_class=HTMLResponse)
-def ui_dashboard(request: Request, db: Session = Depends(get_db), date: str | None = None):
+def ui_dashboard(
+    request: Request,
+    db: Session = Depends(get_db),
+    date: str | None = None,
+    doctor_id: int | None = None,
+):
     current_doctor = _require_login(request, db)
     if not current_doctor:
         return _redirect_login()
@@ -445,19 +468,25 @@ def ui_dashboard(request: Request, db: Session = Depends(get_db), date: str | No
     start_dt = datetime(start_date.year, start_date.month, start_date.day, 0, 0, 0)
     end_dt = datetime(end_date.year, end_date.month, end_date.day, 23, 59, 59)
 
-    appts = (
+    query = (
         db.query(Appointment)
-        .options(joinedload(Appointment.patient))
-        .filter(Appointment.doctor_id == current_doctor.id)
+        .options(joinedload(Appointment.patient), joinedload(Appointment.doctor))
         .filter(Appointment.start_at >= start_dt)
         .filter(Appointment.start_at <= end_dt)
-        .order_by(Appointment.start_at.asc())
-        .all()
     )
+
+    if doctor_id:
+        query = query.filter(Appointment.doctor_id == doctor_id)
+
+    appts = query.order_by(Appointment.start_at.asc()).all()
+
+    doctors = db.query(Doctor).order_by(Doctor.name.asc()).all()
 
     for a in appts:
         a.can_start_now = _can_start_now(a)
         a.ui_badge = _compute_ui_badge(a)
+        a.doctor_color = _doctor_color(a.doctor_id)
+        a.doctor_name = a.doctor.name if getattr(a, "doctor", None) else f"Doctor #{a.doctor_id}"
 
     days = {}
     for a in appts:
@@ -480,6 +509,8 @@ def ui_dashboard(request: Request, db: Session = Depends(get_db), date: str | No
         "next_date": next_date,
         "ordered_days": ordered_days,
         "days": days,
+        "doctors": doctors,
+        "selected_doctor_id": doctor_id,
     }
 
     html = templates.get_template("dashboard.html").render(**ctx)
