@@ -2,6 +2,8 @@ from datetime import datetime, timedelta
 import os
 from pathlib import Path
 from zoneinfo import ZoneInfo
+import re
+import unicodedata
 
 import pandas as pd
 from fastapi import APIRouter, Depends, Request, HTTPException
@@ -18,6 +20,125 @@ templates = Jinja2Templates(directory="app/templates")
 
 APP_TZ = ZoneInfo(os.getenv("APP_TIMEZONE", "America/Guayaquil"))
 CIE10_FILE = Path("app/assets/cie10.xlsx")
+
+CIE10_SMART_ALIASES = {
+    "itu": [
+        "infeccion del tracto urinario",
+        "infeccion urinaria",
+        "infeccion de vias urinarias",
+        "infeccion de las vias urinarias",
+        "cistitis",
+    ],
+    "ivu": [
+        "infeccion urinaria",
+        "infeccion de vias urinarias",
+        "infeccion del tracto urinario",
+        "cistitis",
+    ],
+    "hta": [
+        "hipertension",
+        "hipertension arterial",
+        "crisis hipertensiva",
+    ],
+    "dm": [
+        "diabetes",
+        "diabetes mellitus",
+    ],
+    "dm2": [
+        "diabetes mellitus tipo 2",
+        "diabetes tipo 2",
+        "diabetes mellitus",
+    ],
+    "dm1": [
+        "diabetes mellitus tipo 1",
+        "diabetes tipo 1",
+        "diabetes mellitus",
+    ],
+    "eda": [
+        "diarrea",
+        "gastroenteritis",
+        "enfermedad diarreica aguda",
+    ],
+    "ira": [
+        "infeccion respiratoria aguda",
+        "faringitis",
+        "amigdalitis",
+        "resfriado comun",
+    ],
+    "ivrs": [
+        "infeccion de vias respiratorias superiores",
+        "resfriado comun",
+        "faringitis",
+    ],
+    "lumbalgia": [
+        "dolor lumbar",
+        "lumbago",
+    ],
+    "cefalea": [
+        "dolor de cabeza",
+        "migraña",
+        "migraña sin aura",
+        "migraña con aura",
+    ],
+    "otitis": [
+        "otitis media",
+        "otitis externa",
+    ],
+    "faringoamigdalitis": [
+        "faringitis",
+        "amigdalitis",
+        "infeccion de vias respiratorias superiores",
+    ],
+    "gripe": [
+        "influenza",
+        "resfriado comun",
+        "infeccion respiratoria aguda",
+    ],
+    "neumonia": [
+        "neumonia",
+        "bronconeumonia",
+    ],
+    "asma": [
+        "asma",
+        "crisis asmatica",
+        "broncoespasmo",
+    ],
+    "eca": [
+        "enfermedad cerebrovascular",
+        "accidente cerebrovascular",
+        "ictus",
+    ],
+    "acv": [
+        "accidente cerebrovascular",
+        "ictus",
+        "enfermedad cerebrovascular",
+    ],
+    "iam": [
+        "infarto agudo de miocardio",
+        "infarto",
+        "sindrome coronario agudo",
+    ],
+    "sca": [
+        "sindrome coronario agudo",
+        "angina inestable",
+        "infarto agudo de miocardio",
+    ],
+    "its": [
+        "infeccion de transmision sexual",
+        "uretritis",
+        "gonorrea",
+        "sifilis",
+    ],
+    "dengue": [
+        "dengue",
+        "fiebre por dengue",
+    ],
+    "covid": [
+        "covid",
+        "covid 19",
+        "infeccion por coronavirus",
+    ],
+}
 
 
 def _redirect_login():
@@ -84,6 +205,19 @@ def _norm_text(value) -> str:
     if pd.isna(value):
         return ""
     return str(value).strip()
+
+
+def _strip_accents(value: str) -> str:
+    value = unicodedata.normalize("NFD", value or "")
+    return "".join(ch for ch in value if unicodedata.category(ch) != "Mn")
+
+
+def _normalize_search_text(value: str) -> str:
+    value = _norm_text(value).lower()
+    value = _strip_accents(value)
+    value = re.sub(r"[^a-z0-9\s\.]", " ", value)
+    value = re.sub(r"\s+", " ", value).strip()
+    return value
 
 
 def _normalize_cie_code(value: str) -> str:
@@ -157,50 +291,120 @@ def _load_cie10_data():
 CIE10_DATA = _load_cie10_data()
 
 
+def _expand_smart_query(query: str) -> list[str]:
+    base = _normalize_search_text(query)
+    if not base:
+        return []
+
+    variants = [base]
+
+    compact = base.replace(" ", "")
+    if compact and compact != base:
+        variants.append(compact)
+
+    alias_values = CIE10_SMART_ALIASES.get(base, [])
+    for item in alias_values:
+        normalized = _normalize_search_text(item)
+        if normalized and normalized not in variants:
+            variants.append(normalized)
+
+    return variants
+
+
+def _tokenize_query(value: str) -> list[str]:
+    normalized = _normalize_search_text(value)
+    if not normalized:
+        return []
+    return [tok for tok in normalized.split(" ") if tok]
+
+
 def _search_local_cie10(query: str, limit: int = 15):
-    q = _norm_text(query).upper()
+    q_raw = _norm_text(query)
+    q = q_raw.upper()
     if len(q) < 2:
         return []
 
-    q_clean = q.replace(".", "").replace(" ", "")
-    q_lower = q.lower()
+    q_clean_code = q.replace(".", "").replace(" ", "")
+    q_text = _normalize_search_text(q_raw)
+    q_tokens = _tokenize_query(q_raw)
+    q_variants = _expand_smart_query(q_raw)
 
     scored = []
+    seen = set()
 
     for item in CIE10_DATA:
         code = item["code"]
         desc = item["description"]
 
-        code_clean = code.replace(".", "").replace(" ", "")
-        desc_lower = desc.lower()
+        code_clean = code.replace(".", "").replace(" ", "").upper()
+        desc_norm = _normalize_search_text(desc)
+        desc_tokens = set(desc_norm.split())
 
         score = None
 
-        if code_clean == q_clean:
+        if code_clean == q_clean_code:
             score = 100
         elif code == q:
-            score = 98
+            score = 99
         elif code.startswith(q):
+            score = 96
+        elif code_clean.startswith(q_clean_code):
             score = 95
-        elif code_clean.startswith(q_clean):
-            score = 93
-        elif q_lower == desc_lower:
-            score = 90
-        elif desc_lower.startswith(q_lower):
-            score = 80
-        elif q_lower in desc_lower:
-            score = 70
+        elif q_text and desc_norm == q_text:
+            score = 92
+        elif q_text and desc_norm.startswith(q_text):
+            score = 86
+        else:
+            best_variant_score = None
 
-        if score is not None:
-            scored.append((
-                score,
-                len(code),
-                code,
-                {
-                    "code": code,
-                    "description": desc,
-                }
-            ))
+            for variant in q_variants:
+                if not variant:
+                    continue
+
+                variant_tokens = [tok for tok in variant.split(" ") if tok]
+
+                if desc_norm == variant:
+                    best_variant_score = max(best_variant_score or 0, 90)
+                elif desc_norm.startswith(variant):
+                    best_variant_score = max(best_variant_score or 0, 84)
+                elif variant in desc_norm:
+                    best_variant_score = max(best_variant_score or 0, 78)
+                elif variant_tokens and all(tok in desc_tokens for tok in variant_tokens):
+                    best_variant_score = max(best_variant_score or 0, 72)
+                elif variant_tokens:
+                    overlap = sum(1 for tok in variant_tokens if tok in desc_tokens)
+                    if overlap >= 2:
+                        best_variant_score = max(best_variant_score or 0, 60 + overlap)
+
+            if best_variant_score is not None:
+                score = best_variant_score
+
+        if score is None and q_tokens:
+            overlap = sum(1 for tok in q_tokens if tok in desc_tokens)
+            if overlap == len(q_tokens) and overlap > 0:
+                score = 68
+            elif overlap >= 2:
+                score = 58 + overlap
+            elif overlap == 1 and len(q_tokens) == 1:
+                score = 52
+
+        if score is None:
+            continue
+
+        key = (code, desc.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+
+        scored.append((
+            score,
+            len(code),
+            code,
+            {
+                "code": code,
+                "description": desc,
+            }
+        ))
 
     scored.sort(key=lambda x: (-x[0], x[1], x[2]))
     return [x[3] for x in scored[:limit]]
