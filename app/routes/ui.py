@@ -1,12 +1,9 @@
 from datetime import datetime, timedelta
 import os
+from pathlib import Path
 from zoneinfo import ZoneInfo
-import json
-import re
-from html import unescape
-from urllib.parse import urlencode
-from urllib.request import Request as UrlRequest, urlopen
 
+import pandas as pd
 from fastapi import APIRouter, Depends, Request, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
@@ -20,7 +17,7 @@ router = APIRouter(prefix="/app", tags=["UI"])
 templates = Jinja2Templates(directory="app/templates")
 
 APP_TZ = ZoneInfo(os.getenv("APP_TIMEZONE", "America/Guayaquil"))
-CPOCKETS_CIE10_ROUTE = "https://cpockets.com/ajaxsearch10"
+CIE10_FILE = Path("app/assets/cie10.xlsx")
 
 
 def _redirect_login():
@@ -81,126 +78,132 @@ def _is_editable(enc: Encounter) -> bool:
     return datetime.utcnow() <= (enc.ended_at + timedelta(minutes=20))
 
 
-def _http_fetch_text(url: str, method: str = "GET", data: bytes | None = None) -> str:
-    req = UrlRequest(
-        url,
-        data=data,
-        method=method,
-        headers={
-            "User-Agent": "Mozilla/5.0 NexaCenter/1.0",
-            "Accept": "application/json, text/html, */*",
-            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-        },
-    )
-    with urlopen(req, timeout=12) as resp:
-        raw = resp.read()
-        return raw.decode("utf-8", errors="ignore")
+def _norm_text(value) -> str:
+    if value is None:
+        return ""
+    if pd.isna(value):
+        return ""
+    return str(value).strip()
 
 
-def _flatten_json_strings(obj):
+def _normalize_cie_code(value: str) -> str:
+    raw = _norm_text(value).upper().replace(" ", "")
+    if not raw:
+        return ""
+
+    raw_no_dot = raw.replace(".", "")
+
+    if len(raw_no_dot) >= 4:
+        return raw_no_dot[:3] + "." + raw_no_dot[3:]
+
+    return raw
+
+
+def _load_cie10_data():
     items = []
-
-    if isinstance(obj, dict):
-        for _, v in obj.items():
-            items.extend(_flatten_json_strings(v))
-    elif isinstance(obj, list):
-        for v in obj:
-            items.extend(_flatten_json_strings(v))
-    elif isinstance(obj, str):
-        items.append(obj)
-
-    return items
-
-
-def _extract_code_desc_from_line(line: str):
-    line = " ".join((line or "").split()).strip()
-    if not line:
-        return None
-
-    m = re.search(r"\b([A-TV-Z][0-9]{2}(?:\.[0-9A-Z]{1,4})?)\b", line)
-    if not m:
-        return None
-
-    code = m.group(1).strip()
-    desc = (line.replace(code, "", 1)).strip(" -:|•;,.")
-    if len(desc) < 3:
-        return None
-
-    return {"code": code, "description": desc}
-
-
-def _parse_cpockets_payload(text: str):
-    results = []
     seen = set()
 
-    def add_item(code: str, description: str):
-        key = (code.strip().upper(), description.strip().lower())
-        if key in seen:
-            return
-        seen.add(key)
-        results.append({"code": code.strip().upper(), "description": description.strip()})
+    if not CIE10_FILE.exists():
+        print(f"⚠️ Archivo CIE-10 no encontrado: {CIE10_FILE}")
+        return items
 
     try:
-        obj = json.loads(text)
-        strings = _flatten_json_strings(obj)
-        for s in strings:
-            parsed = _extract_code_desc_from_line(s)
-            if parsed:
-                add_item(parsed["code"], parsed["description"])
-        if results:
-            return results[:15]
-    except Exception:
-        pass
+        xls = pd.ExcelFile(CIE10_FILE)
 
-    plain = unescape(text)
-    plain = re.sub(r"<br\s*/?>", "\n", plain, flags=re.I)
-    plain = re.sub(r"</(p|div|li|tr|td|span|a|h[1-6])>", "\n", plain, flags=re.I)
-    plain = re.sub(r"<[^>]+>", " ", plain)
-    plain = re.sub(r"[ \t\r\f\v]+", " ", plain)
+        sheet_configs = [
+            ("Catálogo CIE-10 principal", "CIE PRINCIPAL", "DESCRIPCION"),
+            ("Catálogo CIE-10 causa externa", "CIE CAUSA EXTERNA", "DESCRIPCION"),
+        ]
 
-    for raw_line in plain.split("\n"):
-        line = raw_line.strip()
-        parsed = _extract_code_desc_from_line(line)
-        if parsed:
-            add_item(parsed["code"], parsed["description"])
+        for sheet_name, code_col, desc_col in sheet_configs:
+            if sheet_name not in xls.sheet_names:
+                print(f"⚠️ Hoja no encontrada en CIE-10: {sheet_name}")
+                continue
 
-    if not results:
-        chunks = re.split(r"[;\n]+", plain)
-        for ch in chunks:
-            parsed = _extract_code_desc_from_line(ch)
-            if parsed:
-                add_item(parsed["code"], parsed["description"])
+            df = pd.read_excel(CIE10_FILE, sheet_name=sheet_name)
 
-    return results[:15]
+            if code_col not in df.columns or desc_col not in df.columns:
+                print(f"⚠️ Columnas no encontradas en hoja {sheet_name}")
+                continue
 
+            for _, row in df.iterrows():
+                code_raw = _norm_text(row.get(code_col))
+                desc_raw = _norm_text(row.get(desc_col))
 
-def _cpockets_search_cie10(query: str):
-    q = (query or "").strip()
-    if not q:
+                if not code_raw or not desc_raw:
+                    continue
+
+                code = _normalize_cie_code(code_raw)
+                description = desc_raw
+
+                key = (code.upper(), description.lower())
+                if key in seen:
+                    continue
+
+                seen.add(key)
+                items.append({
+                    "code": code.upper(),
+                    "description": description,
+                })
+
+        print(f"✅ CIE-10 cargado desde Excel: {len(items)} registros")
+        return items
+
+    except Exception as e:
+        print("⚠️ Error cargando archivo CIE-10:", repr(e))
         return []
 
-    param_names = ["query", "q", "term", "search", "keyword"]
 
-    for pname in param_names:
-        try:
-            qs = urlencode({pname: q})
-            body = _http_fetch_text(f"{CPOCKETS_CIE10_ROUTE}?{qs}", method="GET")
-            parsed = _parse_cpockets_payload(body)
-            if parsed:
-                return parsed
-        except Exception:
-            pass
+CIE10_DATA = _load_cie10_data()
 
-        try:
-            data = urlencode({pname: q}).encode("utf-8")
-            body = _http_fetch_text(CPOCKETS_CIE10_ROUTE, method="POST", data=data)
-            parsed = _parse_cpockets_payload(body)
-            if parsed:
-                return parsed
-        except Exception:
-            pass
 
-    return []
+def _search_local_cie10(query: str, limit: int = 15):
+    q = _norm_text(query).upper()
+    if len(q) < 2:
+        return []
+
+    q_clean = q.replace(".", "").replace(" ", "")
+    q_lower = q.lower()
+
+    scored = []
+
+    for item in CIE10_DATA:
+        code = item["code"]
+        desc = item["description"]
+
+        code_clean = code.replace(".", "").replace(" ", "")
+        desc_lower = desc.lower()
+
+        score = None
+
+        if code_clean == q_clean:
+            score = 100
+        elif code == q:
+            score = 98
+        elif code.startswith(q):
+            score = 95
+        elif code_clean.startswith(q_clean):
+            score = 93
+        elif q_lower == desc_lower:
+            score = 90
+        elif desc_lower.startswith(q_lower):
+            score = 80
+        elif q_lower in desc_lower:
+            score = 70
+
+        if score is not None:
+            scored.append((
+                score,
+                len(code),
+                code,
+                {
+                    "code": code,
+                    "description": desc,
+                }
+            ))
+
+    scored.sort(key=lambda x: (-x[0], x[1], x[2]))
+    return [x[3] for x in scored[:limit]]
 
 
 @router.get("/cie10/search")
@@ -217,7 +220,7 @@ def ui_cie10_search(
     if len(query) < 2:
         return JSONResponse({"ok": True, "results": []})
 
-    results = _cpockets_search_cie10(query)
+    results = _search_local_cie10(query, limit=15)
     return JSONResponse({"ok": True, "results": results})
 
 
