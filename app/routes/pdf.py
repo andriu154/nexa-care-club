@@ -46,10 +46,32 @@ CONTENT_WIDTH = PAGE_WIDTH - LEFT - RIGHT
 
 KNOWN_DOCTORS = {
     "Dra. Yiria Rosario Collantes Santos": {
+        "display_name": "Dra. Yiria Collantes",
         "registration": "1312059627",
         "specialty": "Médico General",
     },
     "Dr. Miguel Andrés Herrería Rodríguez": {
+        "display_name": "Dr. Andrés Herrería",
+        "registration": "1750785220",
+        "specialty": "Médico Cirujano",
+    },
+    "Miguel": {
+        "display_name": "Dr. Andrés Herrería",
+        "registration": "1750785220",
+        "specialty": "Médico Cirujano",
+    },
+    "Dr. Miguel": {
+        "display_name": "Dr. Andrés Herrería",
+        "registration": "1750785220",
+        "specialty": "Médico Cirujano",
+    },
+    "Andrés": {
+        "display_name": "Dr. Andrés Herrería",
+        "registration": "1750785220",
+        "specialty": "Médico Cirujano",
+    },
+    "Dr. Andrés Herrería": {
+        "display_name": "Dr. Andrés Herrería",
         "registration": "1750785220",
         "specialty": "Médico Cirujano",
     },
@@ -108,13 +130,26 @@ def _doctor_meta(doctor: Doctor | None):
     specialty = getattr(doctor, "specialty", None) if doctor else None
     registration = getattr(doctor, "registration", None) if doctor else None
 
-    if name and (not specialty or not registration):
-        kb = KNOWN_DOCTORS.get(name)
-        if kb:
-            specialty = specialty or kb.get("specialty")
-            registration = registration or kb.get("registration")
+    display_name = name or "-"
 
-    return (name or "-", specialty or "-", registration or "-")
+    kb = None
+    if name:
+        kb = KNOWN_DOCTORS.get(name)
+
+    if kb:
+        display_name = kb.get("display_name") or display_name
+        specialty = kb.get("specialty") or specialty
+        registration = kb.get("registration") or registration
+
+    if registration == "1750785220":
+        display_name = "Dr. Andrés Herrería"
+        specialty = "Médico Cirujano"
+
+    if registration == "1312059627":
+        display_name = "Dra. Yiria Collantes"
+        specialty = "Médico General"
+
+    return (display_name or "-", specialty or "-", registration or "-")
 
 
 def _doctor_signature_path(doctor: Doctor | None) -> str | None:
@@ -310,31 +345,23 @@ def _draw_page_header(c, title_right: str, subtitle_right: str = ""):
 
 
 def _draw_info_chip(c, x: float, y: float, label: str, value: str, width: float):
-    h = 22
+    h = 44
+
     c.setFillColor(COLOR_WHITE)
     c.setStrokeColor(COLOR_BORDER)
     c.setLineWidth(0.8)
-    c.roundRect(x, y - h, width, h, 10, stroke=1, fill=1)
+    c.roundRect(x, y - h, width, h, 12, stroke=1, fill=1)
 
     label_text = _safe(label, "-")
     value_text = _safe(value, "-")
 
     c.setFont("Helvetica-Bold", 8)
     c.setFillColor(COLOR_MUTED)
-    c.drawString(x + 8, y - 14, label_text)
+    c.drawString(x + 10, y - 14, label_text)
 
-    c.setFont("Helvetica", 8)
+    c.setFont("Helvetica", 10)
     c.setFillColor(COLOR_TEXT)
-
-    value_x = x + 96
-    max_value_width = width - (value_x - x) - 8
-    if max_value_width < 30:
-        max_value_width = 30
-
-    while stringWidth(value_text, "Helvetica", 8) > max_value_width and len(value_text) > 3:
-        value_text = value_text[:-4] + "..."
-
-    c.drawString(value_x, y - 14, value_text)
+    c.drawString(x + 10, y - 30, value_text)
 
 
 def _draw_meta_grid(c, y_top: float, rows: list[tuple[str, str]], cols: int = 2):
@@ -655,11 +682,11 @@ def _draw_prescription_header(c, enc: Encounter, patient: Patient | None, doctor
         f"Atención #{enc.id}",
     )
 
-    chip_w = (CONTENT_WIDTH - 16) / 3
-    _draw_info_chip(c, LEFT, y, "Fecha prescripción", _fmt_dt(_best_datetime(enc)), chip_w)
-    _draw_info_chip(c, LEFT + chip_w + 8, y, "Paciente", getattr(patient, "full_name", None) or "N/A", chip_w)
-    _draw_info_chip(c, LEFT + (chip_w + 8) * 2, y, "Documento", datetime.now().strftime("%Y-%m-%d %H:%M"), chip_w)
-    y -= 34
+   chip_w = (CONTENT_WIDTH - 16) / 3
+_draw_info_chip(c, LEFT, y, "Fecha prescripción", _fmt_dt(_best_datetime(enc)), chip_w)
+_draw_info_chip(c, LEFT + chip_w + 8, y, "Paciente", getattr(patient, "full_name", None) or "N/A", chip_w)
+_draw_info_chip(c, LEFT + (chip_w + 8) * 2, y, "Documento", datetime.now().strftime("%Y-%m-%d %H:%M"), chip_w)
+y -= 56
 
     doc_name, doc_spec, doc_reg = _doctor_meta(doctor)
     meta_rows = [
