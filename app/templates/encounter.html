@@ -6,7 +6,8 @@
 
 {% block actions %}
   <a class="btn btn-outline" href="/app/patients/{{ patient.id }}">Volver</a>
-  <a class="btn btn-outline" href="{{ pdf_url }}" target="_blank" rel="noopener">PDF</a>
+  <a class="btn btn-outline" href="{{ pdf_url }}" target="_blank" rel="noopener">PDF atención</a>
+  <a class="btn btn-outline" href="/encounters/{{ enc.id }}/prescription/pdf" target="_blank" rel="noopener">Receta</a>
 
   {% if is_owner and not enc.ended_at %}
     <form method="post" action="/app/encounters/{{ enc.id }}/end" style="display:inline;">
@@ -73,9 +74,49 @@
   .dx-option:hover{background:#f8fbff;}
   .dx-option-code{font-size:12px;font-weight:800;color:#0b4dbb;}
   .dx-option-desc{margin-top:4px;font-size:13px;color:#334155;}
+  .rx-box{
+    border:1px solid #dbe6f3;
+    border-radius:18px;
+    background:#fff;
+    overflow:hidden;
+  }
+  .rx-head{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr) 56px;
+    gap:12px;
+    padding:12px 14px;
+    background:#f4f8ff;
+    border-bottom:1px solid #e7eef8;
+    color:#173f7f;
+    font-size:12px;
+    font-weight:800;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+  }
+  .rx-list{
+    display:grid;
+    gap:10px;
+    padding:14px;
+  }
+  .rx-row{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr) 56px;
+    gap:12px;
+    align-items:start;
+    padding:12px;
+    border:1px solid #dbe6f3;
+    border-radius:16px;
+    background:#fbfdff;
+  }
+  .rx-remove{
+    min-height:50px;
+    align-self:stretch;
+  }
   .side-sticky{position:sticky;top:20px;}
   @media (max-width: 1200px){.wiz-layout{grid-template-columns:1fr;}}
-  @media (max-width: 900px){.wiz-grid-2,.wiz-grid-6{grid-template-columns:1fr;}.dx-row{grid-template-columns:1fr;}}
+  @media (max-width: 900px){
+    .wiz-grid-2,.wiz-grid-6,.dx-row,.rx-head,.rx-row{grid-template-columns:1fr;}
+  }
 </style>
 
 <div class="wiz-layout">
@@ -151,6 +192,7 @@
         {% set dis = "" if can_edit_note else "disabled" %}
 
         <input type="hidden" name="assessment_dx" id="assessmentDxHidden" value="{{ note.assessment_dx if note and note.assessment_dx else '' }}">
+        <input type="hidden" name="prescription_items_json" id="prescriptionItemsHidden" value="{{ enc.prescription_json if enc and enc.prescription_json else '[]' }}">
 
         <section class="wiz-page active" data-page="0">
           <div class="wiz-section">
@@ -310,6 +352,34 @@
                 <textarea class="textarea" name="plan_treatment" {{ dis }}>{{ note.plan_treatment if note and note.plan_treatment else "" }}</textarea>
               </div>
 
+              <div class="wiz-section">
+                <div class="wiz-section-head">
+                  <div class="wiz-section-title" style="font-size:16px;">Receta médica</div>
+                  <div class="wiz-section-sub">La receta queda guardada dentro de la atención para luego imprimirla aparte.</div>
+                </div>
+
+                <div class="wiz-section-body">
+                  <div class="rx-box">
+                    <div class="rx-head">
+                      <div>Prescripción</div>
+                      <div>Indicación</div>
+                      <div></div>
+                    </div>
+                    <div class="rx-list" id="rxList"></div>
+                  </div>
+
+                  {% if can_edit_note %}
+                    <div>
+                      <button type="button" class="btn btn-outline" id="addRxBtn">+ Agregar medicamento</button>
+                    </div>
+                  {% endif %}
+
+                  <div class="wiz-note">
+                    Ejemplo: en prescripción “Paracetamol 500 mg tabletas” y en indicación “1 tableta cada 8 horas por 5 días”.
+                  </div>
+                </div>
+              </div>
+
               <div class="wiz-field">
                 <label class="wiz-label">Signos de alarma</label>
                 <textarea class="textarea" name="indications_alarm_signs" {{ dis }}>{{ note.indications_alarm_signs if note and note.indications_alarm_signs else "" }}</textarea>
@@ -380,6 +450,9 @@
   const dxList = document.getElementById("dxList");
   const addDxBtn = document.getElementById("addDxBtn");
   const assessmentHidden = document.getElementById("assessmentDxHidden");
+  const rxList = document.getElementById("rxList");
+  const addRxBtn = document.getElementById("addRxBtn");
+  const prescriptionItemsHidden = document.getElementById("prescriptionItemsHidden");
 
   let currentStep = 0;
   let autosaveTimer = null;
@@ -488,9 +561,99 @@
     }
   }
 
+  function serializePrescriptionList() {
+    const rows = Array.from(rxList.querySelectorAll(".rx-row"));
+    const items = rows.map((row) => {
+      return {
+        prescription: (row.querySelector(".rx-prescription")?.value || "").trim(),
+        indication: (row.querySelector(".rx-indication")?.value || "").trim()
+      };
+    }).filter((item) => item.prescription || item.indication);
+
+    prescriptionItemsHidden.value = JSON.stringify(items);
+  }
+
+  function addRxRow(prescription = "", indication = "") {
+    const row = document.createElement("div");
+    row.className = "rx-row";
+    row.innerHTML = `
+      <div class="wiz-field">
+        <label class="wiz-label">Prescripción</label>
+        <input class="input rx-prescription" type="text" placeholder="Ej: Amoxicilina 500 mg cápsulas" value="${escapeHtml(prescription)}" ${canEdit ? "" : "disabled"}>
+      </div>
+
+      <div class="wiz-field">
+        <label class="wiz-label">Indicación</label>
+        <input class="input rx-indication" type="text" placeholder="Ej: 1 cápsula cada 8 horas por 7 días" value="${escapeHtml(indication)}" ${canEdit ? "" : "disabled"}>
+      </div>
+
+      <button type="button" class="btn btn-danger rx-remove" ${canEdit ? "" : "disabled"}>✕</button>
+    `;
+
+    rxList.appendChild(row);
+
+    const prescriptionInput = row.querySelector(".rx-prescription");
+    const indicationInput = row.querySelector(".rx-indication");
+    const removeBtn = row.querySelector(".rx-remove");
+
+    function syncRx() {
+      serializePrescriptionList();
+      scheduleAutosave();
+    }
+
+    prescriptionInput.addEventListener("input", syncRx);
+    prescriptionInput.addEventListener("change", syncRx);
+    indicationInput.addEventListener("input", syncRx);
+    indicationInput.addEventListener("change", syncRx);
+
+    removeBtn.addEventListener("click", () => {
+      row.remove();
+
+      if (rxList.querySelectorAll(".rx-row").length === 0) {
+        addRxRow("", "");
+      } else {
+        serializePrescriptionList();
+        scheduleAutosave();
+      }
+    });
+
+    serializePrescriptionList();
+  }
+
+  function bootstrapPrescriptionList() {
+    let items = [];
+
+    try {
+      const raw = (prescriptionItemsHidden.value || "").trim();
+      if (raw) {
+        items = JSON.parse(raw);
+      }
+    } catch (e) {
+      items = [];
+    }
+
+    if (!Array.isArray(items) || items.length === 0) {
+      addRxRow("", "");
+      return;
+    }
+
+    items.forEach((item) => {
+      addRxRow(item.prescription || "", item.indication || "");
+    });
+  }
+
+  function escapeHtml(value) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
   function addDxRow(code = "", desc = "") {
-    const safeCode = (code || "").replace(/"/g, "&quot;");
-    const safeDesc = (desc || "").replace(/"/g, "&quot;");
+    const safeCode = escapeHtml(code || "");
+    const safeDesc = escapeHtml(desc || "");
 
     const row = document.createElement("div");
     row.className = "dx-row";
@@ -671,6 +834,8 @@
     if (!canEdit) return true;
 
     serializeDxList();
+    serializePrescriptionList();
+
     const formData = new FormData(form);
 
     setSaveState("Guardando...");
@@ -744,7 +909,12 @@
     addDxBtn.addEventListener("click", () => addDxRow("", ""));
   }
 
+  if (addRxBtn) {
+    addRxBtn.addEventListener("click", () => addRxRow("", ""));
+  }
+
   bootstrapDx();
+  bootstrapPrescriptionList();
   showStep(0);
 })();
 </script>

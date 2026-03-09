@@ -103,6 +103,18 @@ def ensure_sqlite_schema():
                     conn.execute(text("ALTER TABLE patients ADD COLUMN updated_at DATETIME;"))
                     print("✅ Migración: patients.updated_at agregado")
 
+            # encounters
+            tble = conn.execute(
+                text("SELECT name FROM sqlite_master WHERE type='table' AND name='encounters';")
+            ).fetchone()
+            if tble:
+                cols = conn.execute(text("PRAGMA table_info(encounters);")).fetchall()
+                col_names = {c[1] for c in cols}
+
+                if "prescription_json" not in col_names:
+                    conn.execute(text("ALTER TABLE encounters ADD COLUMN prescription_json TEXT;"))
+                    print("✅ Migración: encounters.prescription_json agregado")
+
     except Exception as e:
         print("⚠️ Error en migración SQLite:", repr(e))
 

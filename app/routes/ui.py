@@ -4,6 +4,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 import re
 import unicodedata
+import json
 
 import pandas as pd
 from fastapi import APIRouter, Depends, Request, HTTPException
@@ -337,6 +338,43 @@ def _normalize_cie_code(value: str) -> str:
     return raw
 
 
+def _normalize_prescription_json(raw_value) -> str:
+    if raw_value is None:
+        return "[]"
+
+    if isinstance(raw_value, str):
+        raw_value = raw_value.strip()
+        if not raw_value:
+            return "[]"
+        try:
+            parsed = json.loads(raw_value)
+        except Exception:
+            return "[]"
+    elif isinstance(raw_value, list):
+        parsed = raw_value
+    else:
+        return "[]"
+
+    cleaned = []
+    if isinstance(parsed, list):
+        for item in parsed:
+            if not isinstance(item, dict):
+                continue
+
+            prescription = str(item.get("prescription") or "").strip()
+            indication = str(item.get("indication") or "").strip()
+
+            if prescription or indication:
+                cleaned.append(
+                    {
+                        "prescription": prescription,
+                        "indication": indication,
+                    }
+                )
+
+    return json.dumps(cleaned, ensure_ascii=False)
+
+
 def _load_cie10_data():
     items = []
     seen = set()
@@ -645,6 +683,7 @@ def ui_start_appointment(appointment_id: int, request: Request, db: Session = De
         created_at=datetime.utcnow(),
         ended_at=None,
         is_signed=False,
+        prescription_json="[]",
     )
     db.add(enc)
     db.commit()
@@ -750,6 +789,7 @@ def ui_new_encounter(patient_id: int, request: Request, db: Session = Depends(ge
         created_at=datetime.utcnow(),
         ended_at=None,
         is_signed=False,
+        prescription_json="[]",
     )
     db.add(enc)
     db.commit()
@@ -826,6 +866,7 @@ async def ui_save_note(encounter_id: int, request: Request, db: Session = Depend
 
     enc.chief_complaint_short = (form.get("chief_complaint_short") or "").strip()[:120]
     enc.visit_type = (form.get("visit_type") or enc.visit_type or "Ambulatorio").strip()[:50]
+    enc.prescription_json = _normalize_prescription_json(form.get("prescription_items_json"))
 
     note = db.query(ClinicalNote).filter(ClinicalNote.encounter_id == encounter_id).first()
     if not note:

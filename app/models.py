@@ -34,7 +34,6 @@ class Patient(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
-    # ✅ para buscar y autollenar
     cedula = Column(String, unique=True, index=True, nullable=True)
     phone = Column(String, nullable=True)
 
@@ -46,7 +45,6 @@ class Patient(Base):
 
     status = Column(String, default="Activo", nullable=False)
 
-    # ✅ Render/DB: created_at NOT NULL
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, nullable=True)
 
@@ -99,6 +97,9 @@ class Encounter(Base):
 
     visit_type = Column(String, nullable=True)
     chief_complaint_short = Column(String, nullable=True)
+
+    # Receta médica guardada como JSON string
+    prescription_json = Column(Text, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     ended_at = Column(DateTime, nullable=True)

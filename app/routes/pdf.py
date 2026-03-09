@@ -2,9 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse, RedirectResponse
 from sqlalchemy.orm import Session
 from io import BytesIO
-from datetime import datetime
+from datetime import datetime, date
 import os
 import re
+import json
 
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
@@ -500,7 +501,6 @@ def _draw_signature_block(c, y_top: float, attending_doctor: Doctor | None, qr_t
 
     body_top = y_top - 44
 
-    # Columna izquierda
     left_x = LEFT + 14
     c.setFont("Helvetica", 9)
     c.setFillColor(COLOR_MUTED)
@@ -530,7 +530,6 @@ def _draw_signature_block(c, y_top: float, attending_doctor: Doctor | None, qr_t
     c.drawString(left_x + 110, body_top - 56, specialty)
     c.drawString(left_x + 110, body_top - 72, registration)
 
-    # Columna centro derecha: sello
     stamp_x = LEFT + CONTENT_WIDTH - 255
     stamp_box_y = y_top - 96
     c.setFont("Helvetica", 9)
@@ -548,7 +547,6 @@ def _draw_signature_block(c, y_top: float, attending_doctor: Doctor | None, qr_t
         c.setFillColor(COLOR_MUTED)
         c.drawCentredString(stamp_x + 49, stamp_box_y + 24, "Sello")
 
-    # Columna derecha: QR
     qr_x = LEFT + CONTENT_WIDTH - 132
     qr_y = y_top - 108
     c.setFont("Helvetica", 9)
@@ -573,6 +571,146 @@ def _ensure_space(c, y: float, needed: float, page_num: int, title: str, subtitl
     y = _draw_page_header(c, title, subtitle)
     _draw_page_footer(c, page_num)
     return y, page_num + 1
+
+
+def _patient_age(patient: Patient | None) -> str:
+    birth_date = getattr(patient, "birth_date", None) if patient else None
+    if not birth_date:
+        return "-"
+    try:
+        today = date.today()
+        years = today.year - birth_date.year - (
+            (today.month, today.day) < (birth_date.month, birth_date.day)
+        )
+        return str(years)
+    except Exception:
+        return "-"
+
+
+def _load_prescription_items(enc: Encounter) -> list[dict]:
+    raw = getattr(enc, "prescription_json", None)
+    if not raw:
+        return []
+
+    try:
+        items = json.loads(raw)
+    except Exception:
+        return []
+
+    cleaned = []
+    if isinstance(items, list):
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+
+            prescription = str(item.get("prescription") or "").strip()
+            indication = str(item.get("indication") or "").strip()
+
+            if prescription or indication:
+                cleaned.append(
+                    {
+                        "prescription": prescription,
+                        "indication": indication,
+                    }
+                )
+
+    return cleaned
+
+
+def _rx_table_row_height(item: dict) -> float:
+    left_h = _measure_paragraph_height(item.get("prescription") or "-", (CONTENT_WIDTH - 32) / 2 - 12, "Helvetica", 10, 3)
+    right_h = _measure_paragraph_height(item.get("indication") or "-", (CONTENT_WIDTH - 32) / 2 - 12, "Helvetica", 10, 3)
+    return max(34, left_h, right_h) + 8
+
+
+def _draw_prescription_header(c, enc: Encounter, patient: Patient | None, doctor: Doctor | None):
+    y = _draw_page_header(
+        c,
+        "Receta Médica",
+        f"Atención #{enc.id}",
+    )
+
+    chip_w = (CONTENT_WIDTH - 16) / 3
+    _draw_info_chip(c, LEFT, y, "Fecha prescripción", _fmt_dt(_best_datetime(enc)), chip_w)
+    _draw_info_chip(c, LEFT + chip_w + 8, y, "Paciente", getattr(patient, "full_name", None) or "N/A", chip_w)
+    _draw_info_chip(c, LEFT + (chip_w + 8) * 2, y, "Documento", datetime.now().strftime("%Y-%m-%d %H:%M"), chip_w)
+    y -= 34
+
+    doc_name, doc_spec, doc_reg = _doctor_meta(doctor)
+    meta_rows = [
+        ("Paciente", getattr(patient, "full_name", None) or "-"),
+        ("Cédula", getattr(patient, "cedula", None) or "-"),
+        ("Edad", _patient_age(patient)),
+        ("Médico tratante", doc_name),
+        ("Especialidad", doc_spec),
+        ("Registro", doc_reg),
+        ("Tipo de consulta", getattr(enc, "visit_type", None) or "-"),
+        ("ID atención", str(enc.id)),
+    ]
+    y = _draw_meta_grid(c, y, meta_rows, cols=2)
+    return y
+
+
+def _draw_prescription_table(c, y_top: float, items: list[dict]):
+    header_h = 28
+
+    c.setFillColor(COLOR_PRIMARY_SOFT)
+    c.setStrokeColor(COLOR_BORDER)
+    c.setLineWidth(0.9)
+    c.roundRect(LEFT, y_top - header_h, CONTENT_WIDTH, header_h, 12, stroke=1, fill=1)
+
+    mid_x = LEFT + (CONTENT_WIDTH / 2)
+
+    c.setFont("Helvetica-Bold", 11)
+    c.setFillColor(COLOR_PRIMARY)
+    c.drawString(LEFT + 14, y_top - 18, "Prescripción")
+    c.drawString(mid_x + 10, y_top - 18, "Indicación")
+
+    c.setStrokeColor(COLOR_BORDER)
+    c.line(mid_x, y_top - header_h, mid_x, y_top)
+
+    y = y_top - header_h - 8
+
+    if not items:
+        items = [{"prescription": "-", "indication": "-"}]
+
+    for idx, item in enumerate(items):
+        row_h = _rx_table_row_height(item)
+
+        c.setFillColor(COLOR_WHITE if idx % 2 == 0 else COLOR_BG)
+        c.setStrokeColor(COLOR_BORDER)
+        c.roundRect(LEFT, y - row_h, CONTENT_WIDTH, row_h, 10, stroke=1, fill=1)
+        c.line(mid_x, y - row_h, mid_x, y)
+
+        left_text_top = y - 14
+        right_text_top = y - 14
+
+        _draw_paragraph(
+            c,
+            LEFT + 12,
+            left_text_top,
+            item.get("prescription") or "-",
+            (CONTENT_WIDTH / 2) - 22,
+            "Helvetica",
+            10,
+            COLOR_TEXT,
+            3,
+        )
+        _draw_paragraph(
+            c,
+            mid_x + 10,
+            right_text_top,
+            item.get("indication") or "-",
+            (CONTENT_WIDTH / 2) - 22,
+            "Helvetica",
+            10,
+            COLOR_TEXT,
+            3,
+        )
+
+        y -= row_h + 8
+
+    return y
 
 
 @router.get("/encounters/{encounter_id}/pdf")
@@ -656,6 +794,62 @@ def download_encounter_pdf(
     buf.seek(0)
 
     filename = f"nexacenter_encounter_{encounter_id}.pdf"
+    return StreamingResponse(
+        buf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
+
+
+@router.get("/encounters/{encounter_id}/prescription/pdf")
+def download_encounter_prescription_pdf(
+    encounter_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    current_doctor = _require_login(request, db)
+    if not current_doctor:
+        return _redirect_login()
+
+    enc = db.query(Encounter).filter(Encounter.id == encounter_id).first()
+    if not enc:
+        raise HTTPException(status_code=404, detail="Consulta no encontrada")
+
+    patient = db.query(Patient).filter(Patient.id == enc.patient_id).first()
+    attending_doctor = db.query(Doctor).filter(Doctor.id == enc.doctor_id).first()
+    prescription_items = _load_prescription_items(enc)
+    qr_text = _build_validation_url(request, enc)
+
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=PAGE_SIZE)
+    page_num = 1
+
+    _draw_watermark(c)
+    y = _draw_prescription_header(c, enc, patient, attending_doctor)
+    _draw_page_footer(c, page_num)
+    page_num += 1
+
+    needed = 40
+    y, page_num = _ensure_space(c, y, needed, page_num, "Receta Médica", f"Atención #{enc.id}")
+    c.setFont("Helvetica-Bold", 12)
+    c.setFillColor(COLOR_PRIMARY)
+    c.drawString(LEFT, y, "Detalle de receta")
+    y -= 16
+
+    total_table_height = 36
+    for item in prescription_items if prescription_items else [{"prescription": "-", "indication": "-"}]:
+        total_table_height += _rx_table_row_height(item) + 8
+
+    y, page_num = _ensure_space(c, y, total_table_height + 20, page_num, "Receta Médica", f"Atención #{enc.id}")
+    y = _draw_prescription_table(c, y, prescription_items)
+
+    y, page_num = _ensure_space(c, y, 150, page_num, "Receta Médica", f"Atención #{enc.id}")
+    y = _draw_signature_block(c, y, attending_doctor, qr_text)
+
+    c.save()
+    buf.seek(0)
+
+    filename = f"nexacenter_receta_{encounter_id}.pdf"
     return StreamingResponse(
         buf,
         media_type="application/pdf",
