@@ -341,6 +341,8 @@ def _draw_meta_grid(c, y_top: float, rows: list[tuple[str, str]], cols: int = 2)
     col_w = (usable_w - gutter * (cols - 1)) / cols
 
     y = y_top - 18
+    value_offset = 104
+
     for idx, (label, value) in enumerate(rows):
         col = idx % cols
         row = idx // cols
@@ -348,13 +350,24 @@ def _draw_meta_grid(c, y_top: float, rows: list[tuple[str, str]], cols: int = 2)
         x = LEFT + inner_pad + col * (col_w + gutter)
         yy = y - row * row_h
 
+        label_text = f"{label}:"
+        value_text = _safe(value)
+
         c.setFont("Helvetica-Bold", 8)
         c.setFillColor(COLOR_MUTED)
-        c.drawString(x, yy, f"{label}:")
+        c.drawString(x, yy, label_text)
 
         c.setFont("Helvetica", 8.5)
         c.setFillColor(COLOR_TEXT)
-        c.drawString(x + 90, yy, _safe(value))
+
+        max_value_width = col_w - value_offset - 4
+        if max_value_width < 40:
+            max_value_width = 40
+
+        while stringWidth(value_text, "Helvetica", 8.5) > max_value_width and len(value_text) > 3:
+            value_text = value_text[:-4] + "..."
+
+        c.drawString(x + value_offset, yy, value_text)
 
     return y_top - box_h - 14
 
