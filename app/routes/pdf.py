@@ -316,13 +316,25 @@ def _draw_info_chip(c, x: float, y: float, label: str, value: str, width: float)
     c.setLineWidth(0.8)
     c.roundRect(x, y - h, width, h, 10, stroke=1, fill=1)
 
+    label_text = _safe(label, "-")
+    value_text = _safe(value, "-")
+
     c.setFont("Helvetica-Bold", 8)
     c.setFillColor(COLOR_MUTED)
-    c.drawString(x + 8, y - 14, label)
+    c.drawString(x + 8, y - 14, label_text)
 
     c.setFont("Helvetica", 8)
     c.setFillColor(COLOR_TEXT)
-    c.drawRightString(x + width - 8, y - 14, _safe(value))
+
+    value_x = x + 96
+    max_value_width = width - (value_x - x) - 8
+    if max_value_width < 30:
+        max_value_width = 30
+
+    while stringWidth(value_text, "Helvetica", 8) > max_value_width and len(value_text) > 3:
+        value_text = value_text[:-4] + "..."
+
+    c.drawString(value_x, y - 14, value_text)
 
 
 def _draw_meta_grid(c, y_top: float, rows: list[tuple[str, str]], cols: int = 2):
