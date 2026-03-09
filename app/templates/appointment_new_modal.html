@@ -20,7 +20,13 @@
 
         <div class="appt-field">
           <label class="appt-label">Cédula</label>
-          <input class="input" name="cedula" type="text" value="{{ cedula or '' }}" placeholder="Ej: 0102030405" />
+          <input
+            class="input"
+            name="cedula"
+            type="text"
+            value="{{ cedula or '' }}"
+            placeholder="Ej: 0102030405"
+          />
           <div class="appt-help">Escribe la cédula y presiona Buscar paciente.</div>
         </div>
 
@@ -42,7 +48,10 @@
       <div class="appt-section-body">
         <div class="appt-patient">
           <div class="appt-patient-name">{{ patient_found.full_name }}</div>
-          <div class="appt-patient-meta">Cédula: {{ patient_found.cedula }}</div>
+          <div class="appt-patient-meta">
+            Cédula: {{ patient_found.cedula if patient_found.cedula else "—" }}
+            {% if patient_found.phone %} • Tel: {{ patient_found.phone }}{% endif %}
+          </div>
         </div>
 
         <form method="post" action="/app/appointments/new">
@@ -58,13 +67,28 @@
 
             <div class="appt-field">
               <label class="appt-label">Duración (min)</label>
-              <input class="input" name="duration_min" type="number" min="10" max="240" value="{{ duration_min or 60 }}" required />
+              <input
+                class="input"
+                name="duration_min"
+                type="number"
+                min="10"
+                max="240"
+                value="{{ duration_min or 60 }}"
+                required
+              />
             </div>
           </div>
 
           <div class="appt-field" style="margin-top:14px;">
             <label class="appt-label">Motivo</label>
-            <input class="input" name="reason" type="text" maxlength="120" value="{{ reason or '' }}" placeholder="Ej: control, chequeo, dolor abdominal..." />
+            <input
+              class="input"
+              name="reason"
+              type="text"
+              maxlength="120"
+              value="{{ reason or '' }}"
+              placeholder="Ej: control, chequeo, dolor abdominal..."
+            />
           </div>
 
           <div class="appt-field" style="margin-top:14px;">

@@ -45,9 +45,10 @@ def _clean_cedula(s: str) -> str:
 
 
 def _find_patient_by_cedula(db: Session, cedula: str):
-    if not cedula:
+    ced = _clean_cedula(cedula or "")
+    if not ced:
         return None
-    return db.query(Patient).filter(Patient.cedula == cedula).first()
+    return db.query(Patient).filter(Patient.cedula == ced).first()
 
 
 def _generate_qr_code(db: Session) -> str:
@@ -104,14 +105,13 @@ def new_appointment_form(
         return _redirect_login()
 
     d = _parse_date(date) or _now_local().date()
-
     ced = _clean_cedula(cedula or "")
     patient = _find_patient_by_cedula(db, ced) if ced else None
 
     ctx = {
         "request": request,
         "current_doctor": current_doctor,
-        "date": d,
+        "date": d.isoformat(),
         "cedula": ced,
         "patient_found": patient,
         "error": None,
@@ -174,6 +174,7 @@ def quick_create_patient(
     )
     db.add(p)
     db.commit()
+    db.refresh(p)
 
     suffix = "&modal=1" if str(modal) == "1" else ""
     return RedirectResponse(
