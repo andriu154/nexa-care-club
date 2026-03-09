@@ -41,16 +41,23 @@ pwd_context = CryptContext(
 )
 
 
-def _is_sqlite_engine() -> bool:
+def _db_dialect() -> str:
     try:
-        return engine.dialect.name == "sqlite"
+        return engine.dialect.name
     except Exception:
-        return False
+        return ""
+
+
+def _is_sqlite_engine() -> bool:
+    return _db_dialect() == "sqlite"
+
+
+def _is_postgres_engine() -> bool:
+    return _db_dialect() in {"postgresql", "postgres"}
 
 
 def ensure_sqlite_schema():
     if not _is_sqlite_engine():
-        print("ℹ️ Base de datos actual: no es SQLite. Se omiten migraciones SQLite.")
         return
 
     try:
@@ -65,19 +72,19 @@ def ensure_sqlite_schema():
 
                 if "specialty" not in col_names:
                     conn.execute(text("ALTER TABLE doctors ADD COLUMN specialty VARCHAR;"))
-                    print("✅ Migración: doctors.specialty agregado")
+                    print("✅ Migración SQLite: doctors.specialty agregado")
 
                 if "registration" not in col_names:
                     conn.execute(text("ALTER TABLE doctors ADD COLUMN registration VARCHAR;"))
-                    print("✅ Migración: doctors.registration agregado")
+                    print("✅ Migración SQLite: doctors.registration agregado")
 
                 if "password_hash" not in col_names:
                     conn.execute(text("ALTER TABLE doctors ADD COLUMN password_hash VARCHAR;"))
-                    print("✅ Migración: doctors.password_hash agregado")
+                    print("✅ Migración SQLite: doctors.password_hash agregado")
 
                 if "pin" not in col_names:
                     conn.execute(text("ALTER TABLE doctors ADD COLUMN pin VARCHAR NOT NULL DEFAULT '0000';"))
-                    print("✅ Migración: doctors.pin agregado")
+                    print("✅ Migración SQLite: doctors.pin agregado")
 
             # patients
             tblp = conn.execute(
@@ -89,19 +96,19 @@ def ensure_sqlite_schema():
 
                 if "cedula" not in col_names:
                     conn.execute(text("ALTER TABLE patients ADD COLUMN cedula VARCHAR;"))
-                    print("✅ Migración: patients.cedula agregado")
+                    print("✅ Migración SQLite: patients.cedula agregado")
 
                 if "phone" not in col_names:
                     conn.execute(text("ALTER TABLE patients ADD COLUMN phone VARCHAR;"))
-                    print("✅ Migración: patients.phone agregado")
+                    print("✅ Migración SQLite: patients.phone agregado")
 
                 if "created_at" not in col_names:
                     conn.execute(text("ALTER TABLE patients ADD COLUMN created_at DATETIME;"))
-                    print("✅ Migración: patients.created_at agregado")
+                    print("✅ Migración SQLite: patients.created_at agregado")
 
                 if "updated_at" not in col_names:
                     conn.execute(text("ALTER TABLE patients ADD COLUMN updated_at DATETIME;"))
-                    print("✅ Migración: patients.updated_at agregado")
+                    print("✅ Migración SQLite: patients.updated_at agregado")
 
             # encounters
             tble = conn.execute(
@@ -113,10 +120,134 @@ def ensure_sqlite_schema():
 
                 if "prescription_json" not in col_names:
                     conn.execute(text("ALTER TABLE encounters ADD COLUMN prescription_json TEXT;"))
-                    print("✅ Migración: encounters.prescription_json agregado")
+                    print("✅ Migración SQLite: encounters.prescription_json agregado")
 
     except Exception as e:
         print("⚠️ Error en migración SQLite:", repr(e))
+
+
+def ensure_postgres_schema():
+    if not _is_postgres_engine():
+        return
+
+    try:
+        with engine.begin() as conn:
+            # doctors.specialty
+            exists = conn.execute(text("""
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name = 'doctors' AND column_name = 'specialty'
+                LIMIT 1
+            """)).fetchone()
+            if not exists:
+                conn.execute(text("ALTER TABLE doctors ADD COLUMN specialty VARCHAR;"))
+                print("✅ Migración PostgreSQL: doctors.specialty agregado")
+
+            # doctors.registration
+            exists = conn.execute(text("""
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name = 'doctors' AND column_name = 'registration'
+                LIMIT 1
+            """)).fetchone()
+            if not exists:
+                conn.execute(text("ALTER TABLE doctors ADD COLUMN registration VARCHAR;"))
+                print("✅ Migración PostgreSQL: doctors.registration agregado")
+
+            # doctors.password_hash
+            exists = conn.execute(text("""
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name = 'doctors' AND column_name = 'password_hash'
+                LIMIT 1
+            """)).fetchone()
+            if not exists:
+                conn.execute(text("ALTER TABLE doctors ADD COLUMN password_hash VARCHAR;"))
+                print("✅ Migración PostgreSQL: doctors.password_hash agregado")
+
+            # doctors.pin
+            exists = conn.execute(text("""
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name = 'doctors' AND column_name = 'pin'
+                LIMIT 1
+            """)).fetchone()
+            if not exists:
+                conn.execute(text("ALTER TABLE doctors ADD COLUMN pin VARCHAR NOT NULL DEFAULT '0000';"))
+                print("✅ Migración PostgreSQL: doctors.pin agregado")
+
+            # patients.cedula
+            exists = conn.execute(text("""
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name = 'patients' AND column_name = 'cedula'
+                LIMIT 1
+            """)).fetchone()
+            if not exists:
+                conn.execute(text("ALTER TABLE patients ADD COLUMN cedula VARCHAR;"))
+                print("✅ Migración PostgreSQL: patients.cedula agregado")
+
+            # patients.phone
+            exists = conn.execute(text("""
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name = 'patients' AND column_name = 'phone'
+                LIMIT 1
+            """)).fetchone()
+            if not exists:
+                conn.execute(text("ALTER TABLE patients ADD COLUMN phone VARCHAR;"))
+                print("✅ Migración PostgreSQL: patients.phone agregado")
+
+            # patients.created_at
+            exists = conn.execute(text("""
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name = 'patients' AND column_name = 'created_at'
+                LIMIT 1
+            """)).fetchone()
+            if not exists:
+                conn.execute(text("ALTER TABLE patients ADD COLUMN created_at TIMESTAMP;"))
+                print("✅ Migración PostgreSQL: patients.created_at agregado")
+
+            # patients.updated_at
+            exists = conn.execute(text("""
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name = 'patients' AND column_name = 'updated_at'
+                LIMIT 1
+            """)).fetchone()
+            if not exists:
+                conn.execute(text("ALTER TABLE patients ADD COLUMN updated_at TIMESTAMP;"))
+                print("✅ Migración PostgreSQL: patients.updated_at agregado")
+
+            # encounters.prescription_json
+            exists = conn.execute(text("""
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name = 'encounters' AND column_name = 'prescription_json'
+                LIMIT 1
+            """)).fetchone()
+            if not exists:
+                conn.execute(text("ALTER TABLE encounters ADD COLUMN prescription_json TEXT;"))
+                print("✅ Migración PostgreSQL: encounters.prescription_json agregado")
+
+    except Exception as e:
+        print("⚠️ Error en migración PostgreSQL:", repr(e))
+
+
+def ensure_database_schema():
+    dialect = _db_dialect()
+    print(f"ℹ️ Motor de base de datos detectado: {dialect or 'desconocido'}")
+
+    if _is_sqlite_engine():
+        ensure_sqlite_schema()
+        return
+
+    if _is_postgres_engine():
+        ensure_postgres_schema()
+        return
+
+    print("ℹ️ No hay migraciones manuales configuradas para este motor de base de datos.")
 
 
 def seed_default_doctors_if_enabled():
@@ -170,7 +301,7 @@ def seed_default_doctors_if_enabled():
 
 # init
 Base.metadata.create_all(bind=engine)
-ensure_sqlite_schema()
+ensure_database_schema()
 seed_default_doctors_if_enabled()
 
 # API
