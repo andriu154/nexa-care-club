@@ -44,39 +44,6 @@ TOP = 42
 BOTTOM = 34
 CONTENT_WIDTH = PAGE_WIDTH - LEFT - RIGHT
 
-KNOWN_DOCTORS = {
-    "Dra. Yiria Rosario Collantes Santos": {
-        "display_name": "Dra. Yiria Collantes",
-        "registration": "1312059627",
-        "specialty": "Médico General",
-    },
-    "Dr. Miguel Andrés Herrería Rodríguez": {
-        "display_name": "Dr. Andrés Herrería",
-        "registration": "1750785220",
-        "specialty": "Médico Cirujano",
-    },
-    "Miguel": {
-        "display_name": "Dr. Andrés Herrería",
-        "registration": "1750785220",
-        "specialty": "Médico Cirujano",
-    },
-    "Dr. Miguel": {
-        "display_name": "Dr. Andrés Herrería",
-        "registration": "1750785220",
-        "specialty": "Médico Cirujano",
-    },
-    "Andrés": {
-        "display_name": "Dr. Andrés Herrería",
-        "registration": "1750785220",
-        "specialty": "Médico Cirujano",
-    },
-    "Dr. Andrés Herrería": {
-        "display_name": "Dr. Andrés Herrería",
-        "registration": "1750785220",
-        "specialty": "Médico Cirujano",
-    },
-}
-
 
 def _require_login(request: Request, db: Session):
     doctor = get_logged_doctor(request, db)
@@ -126,30 +93,25 @@ def _slugify(value: str) -> str:
 
 
 def _doctor_meta(doctor: Doctor | None):
-    name = getattr(doctor, "name", None) if doctor else None
-    specialty = getattr(doctor, "specialty", None) if doctor else None
     registration = getattr(doctor, "registration", None) if doctor else None
 
-    display_name = name or "-"
-
-    kb = None
-    if name:
-        kb = KNOWN_DOCTORS.get(name)
-
-    if kb:
-        display_name = kb.get("display_name") or display_name
-        specialty = kb.get("specialty") or specialty
-        registration = kb.get("registration") or registration
-
     if registration == "1750785220":
-        display_name = "Dr. Andrés Herrería"
-        specialty = "Médico Cirujano"
+        return ("Dr. Andrés Herrería", "Médico Cirujano", "1750785220")
 
     if registration == "1312059627":
-        display_name = "Dra. Yiria Collantes"
-        specialty = "Médico General"
+        return ("Dra. Yiria Collantes", "Médico General", "1312059627")
 
-    return (display_name or "-", specialty or "-", registration or "-")
+    name = getattr(doctor, "name", None) if doctor else None
+    specialty = getattr(doctor, "specialty", None) if doctor else None
+
+    lowered = (name or "").lower()
+    if "miguel" in lowered or "andres" in lowered or "herrer" in lowered:
+        return ("Dr. Andrés Herrería", "Médico Cirujano", registration or "-")
+
+    if "yiria" in lowered or "collantes" in lowered:
+        return ("Dra. Yiria Collantes", "Médico General", registration or "-")
+
+    return (name or "-", specialty or "-", registration or "-")
 
 
 def _doctor_signature_path(doctor: Doctor | None) -> str | None:
@@ -374,49 +336,78 @@ def _draw_info_chip(c, x: float, y: float, label: str, value: str, width: float)
     c.drawString(x + 10, y - 30, value_text)
 
 
+def _measure_meta_grid_height(rows: list[tuple[str, str]], cols: int = 2):
+    gutter = 12
+    inner_pad = 10
+    usable_w = CONTENT_WIDTH - inner_pad * 2
+    col_w = (usable_w - gutter * (cols - 1)) / cols
+    value_offset = 100
+    row_top_pad = 16
+    row_bottom_pad = 6
+
+    row_heights = []
+    total_rows = (len(rows) + cols - 1) // cols
+
+    for row_idx in range(total_rows):
+        current_row_items = rows[row_idx * cols:(row_idx + 1) * cols]
+        max_h = 20
+
+        for label, value in current_row_items:
+            value_text = _safe(value)
+            value_width = max(60, col_w - value_offset - 4)
+            wrapped = _wrap_text(value_text, value_width, "Helvetica", 8.5)
+            value_h = len(wrapped) * (8.5 + 3)
+            max_h = max(max_h, row_top_pad + value_h + row_bottom_pad)
+
+        row_heights.append(max_h)
+
+    return 12 + sum(row_heights) + 8, row_heights
+
+
 def _draw_meta_grid(c, y_top: float, rows: list[tuple[str, str]], cols: int = 2):
     gutter = 12
-    row_h = 22
-    inner_pad = 8
-    total_rows = (len(rows) + cols - 1) // cols
-    box_h = 22 + (total_rows * row_h) + 12
+    inner_pad = 10
+    usable_w = CONTENT_WIDTH - inner_pad * 2
+    col_w = (usable_w - gutter * (cols - 1)) / cols
+    value_offset = 100
+
+    box_h, row_heights = _measure_meta_grid_height(rows, cols=cols)
 
     c.setFillColor(COLOR_WHITE)
     c.setStrokeColor(COLOR_BORDER)
     c.setLineWidth(0.9)
     c.roundRect(LEFT, y_top - box_h, CONTENT_WIDTH, box_h, 14, stroke=1, fill=1)
 
-    usable_w = CONTENT_WIDTH - inner_pad * 2
-    col_w = (usable_w - gutter * (cols - 1)) / cols
+    total_rows = (len(rows) + cols - 1) // cols
+    current_y = y_top - 18
 
-    y = y_top - 18
-    value_offset = 104
+    for row_idx in range(total_rows):
+        row_items = rows[row_idx * cols:(row_idx + 1) * cols]
+        row_h = row_heights[row_idx]
 
-    for idx, (label, value) in enumerate(rows):
-        col = idx % cols
-        row = idx // cols
+        for col_idx, (label, value) in enumerate(row_items):
+            x = LEFT + inner_pad + col_idx * (col_w + gutter)
 
-        x = LEFT + inner_pad + col * (col_w + gutter)
-        yy = y - row * row_h
+            c.setFont("Helvetica-Bold", 8)
+            c.setFillColor(COLOR_MUTED)
+            c.drawString(x, current_y, f"{label}:")
 
-        label_text = f"{label}:"
-        value_text = _safe(value)
+            value_text = _safe(value)
+            value_width = max(60, col_w - value_offset - 4)
 
-        c.setFont("Helvetica-Bold", 8)
-        c.setFillColor(COLOR_MUTED)
-        c.drawString(x, yy, label_text)
+            _draw_paragraph(
+                c,
+                x + value_offset,
+                current_y,
+                value_text,
+                value_width,
+                "Helvetica",
+                8.5,
+                COLOR_TEXT,
+                3,
+            )
 
-        c.setFont("Helvetica", 8.5)
-        c.setFillColor(COLOR_TEXT)
-
-        max_value_width = col_w - value_offset - 4
-        if max_value_width < 40:
-            max_value_width = 40
-
-        while stringWidth(value_text, "Helvetica", 8.5) > max_value_width and len(value_text) > 3:
-            value_text = value_text[:-4] + "..."
-
-        c.drawString(x + value_offset, yy, value_text)
+        current_y -= row_h
 
     return y_top - box_h - 14
 
@@ -715,6 +706,7 @@ def _draw_prescription_header(c, enc: Encounter, patient: Patient | None, doctor
         ("Paciente", getattr(patient, "full_name", None) or "-"),
         ("Cédula", getattr(patient, "cedula", None) or "-"),
         ("Edad", _patient_age(patient)),
+        ("Fecha nacimiento", patient.birth_date.isoformat() if patient and getattr(patient, "birth_date", None) else "-"),
         ("Médico tratante", doc_name),
         ("Especialidad", doc_spec),
         ("Registro", doc_reg),
@@ -756,13 +748,10 @@ def _draw_prescription_table(c, y_top: float, items: list[dict]):
         c.roundRect(LEFT, y - row_h, CONTENT_WIDTH, row_h, 10, stroke=1, fill=1)
         c.line(mid_x, y - row_h, mid_x, y)
 
-        left_text_top = y - 14
-        right_text_top = y - 14
-
         _draw_paragraph(
             c,
             LEFT + 12,
-            left_text_top,
+            y - 14,
             item.get("prescription") or "-",
             (CONTENT_WIDTH / 2) - 22,
             "Helvetica",
@@ -773,7 +762,7 @@ def _draw_prescription_table(c, y_top: float, items: list[dict]):
         _draw_paragraph(
             c,
             mid_x + 10,
-            right_text_top,
+            y - 14,
             item.get("indication") or "-",
             (CONTENT_WIDTH / 2) - 22,
             "Helvetica",
@@ -853,6 +842,7 @@ def download_encounter_pdf(
     patient = db.query(Patient).filter(Patient.id == enc.patient_id).first()
     note = db.query(ClinicalNote).filter(ClinicalNote.encounter_id == enc.id).first()
     attending_doctor = db.query(Doctor).filter(Doctor.id == enc.doctor_id).first()
+    prescription_items = _load_prescription_items(enc)
 
     doc_name, doc_spec, doc_reg = _doctor_meta(attending_doctor)
     qr_text = _build_validation_url(request, enc)
@@ -879,9 +869,12 @@ def download_encounter_pdf(
     meta_rows = [
         ("Centro", BRAND_NAME),
         ("Paciente", getattr(patient, "full_name", None) or "N/A"),
+        ("Cédula", getattr(patient, "cedula", None) or "-"),
+        ("Edad", _patient_age(patient)),
+        ("Fecha nacimiento", patient.birth_date.isoformat() if patient and getattr(patient, "birth_date", None) else "-"),
         ("Médico tratante", doc_name),
-        ("Registro", doc_reg),
         ("Especialidad", doc_spec),
+        ("Registro", doc_reg),
         ("Tipo de consulta", getattr(enc, "visit_type", None) or "-"),
         ("Motivo corto", getattr(enc, "chief_complaint_short", None) or "-"),
         ("ID atención", str(enc.id)),
@@ -899,6 +892,19 @@ def download_encounter_pdf(
             needed = _section_height(title, text) + 6
             y, page_num = _ensure_space(c, y, needed, page_num, "Resumen Clínico", f"Atención #{enc.id}")
             y = _draw_section_card(c, y, title, text)
+
+    rx_title = "Receta médica"
+    rx_items = prescription_items if prescription_items else [{"prescription": "-", "indication": "-"}]
+    rx_needed = 36
+    for item in rx_items:
+        rx_needed += _rx_table_row_height(item) + 8
+
+    y, page_num = _ensure_space(c, y, rx_needed + 40, page_num, "Resumen Clínico", f"Atención #{enc.id}")
+    c.setFont("Helvetica-Bold", 12)
+    c.setFillColor(COLOR_PRIMARY)
+    c.drawString(LEFT, y, rx_title)
+    y -= 16
+    y = _draw_prescription_table(c, y, prescription_items)
 
     y, page_num = _ensure_space(c, y, 150, page_num, "Resumen Clínico", f"Atención #{enc.id}")
     y = _draw_signature_block(c, y, attending_doctor, qr_text)
@@ -1022,6 +1028,10 @@ def download_patient_history_pdf(
         )
 
     intro_rows = [
+        ("Paciente", getattr(patient, "full_name", None) or "-"),
+        ("Cédula", getattr(patient, "cedula", None) or "-"),
+        ("Edad", _patient_age(patient)),
+        ("Fecha nacimiento", patient.birth_date.isoformat() if getattr(patient, "birth_date", None) else "-"),
         ("Total atenciones", str(len(encounters_sorted))),
         ("Documento", "Consolidado clínico"),
         ("Centro", BRAND_NAME),
@@ -1029,7 +1039,7 @@ def download_patient_history_pdf(
     ]
     y = _draw_meta_grid(c, y, intro_rows, cols=2)
 
-    for idx, enc in enumerate(encounters_sorted, start=1):
+    for enc in encounters_sorted:
         note = db.query(ClinicalNote).filter(ClinicalNote.encounter_id == enc.id).first()
         attending_doctor = db.query(Doctor).filter(Doctor.id == enc.doctor_id).first()
         evols = (
@@ -1038,19 +1048,20 @@ def download_patient_history_pdf(
             .order_by(EncounterEvolution.created_at.asc())
             .all()
         )
+        prescription_items = _load_prescription_items(enc)
 
         doc_name, doc_spec, doc_reg = _doctor_meta(attending_doctor)
         qr_text = _build_validation_url(request, enc)
 
-        encounter_header_need = 150
+        encounter_header_need = 170
         y, page_num = _ensure_space(c, y, encounter_header_need, page_num, "Historia Clínica", f"Paciente #{patient_id}")
 
         meta_rows = [
             ("Atención", f"#{enc.id}"),
             ("Fecha", _fmt_dt(_best_datetime(enc))),
             ("Médico", doc_name),
-            ("Registro", doc_reg),
             ("Especialidad", doc_spec),
+            ("Registro", doc_reg),
             ("Tipo consulta", getattr(enc, "visit_type", None) or "-"),
             ("Motivo corto", getattr(enc, "chief_complaint_short", None) or "-"),
             ("Estado", "Cerrada" if enc.ended_at else "Abierta"),
@@ -1068,6 +1079,18 @@ def download_patient_history_pdf(
                 needed = _section_height(title, text) + 6
                 y, page_num = _ensure_space(c, y, needed, page_num, "Historia Clínica", f"Paciente #{patient_id}")
                 y = _draw_section_card(c, y, title, text)
+
+        rx_items = prescription_items if prescription_items else [{"prescription": "-", "indication": "-"}]
+        rx_needed = 36
+        for item in rx_items:
+            rx_needed += _rx_table_row_height(item) + 8
+
+        y, page_num = _ensure_space(c, y, rx_needed + 40, page_num, "Historia Clínica", f"Paciente #{patient_id}")
+        c.setFont("Helvetica-Bold", 12)
+        c.setFillColor(COLOR_PRIMARY)
+        c.drawString(LEFT, y, "Receta médica")
+        y -= 16
+        y = _draw_prescription_table(c, y, prescription_items)
 
         if evols:
             evo_text = "\n".join(
