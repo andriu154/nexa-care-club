@@ -75,7 +75,7 @@
     border:1px solid #dbe6f3;
     border-radius:18px;
     background:#fbfdff;
-    overflow:hidden;
+    overflow:visible;
   }
   .wiz-section-head{
     padding:16px 18px;
@@ -84,7 +84,7 @@
   }
   .wiz-section-title{font-size:17px;font-weight:800;color:#173f7f;}
   .wiz-section-sub{margin-top:4px;font-size:13px;color:#6b7280;}
-  .wiz-section-body{padding:18px;display:grid;gap:14px;}
+  .wiz-section-body{padding:18px;display:grid;gap:14px;overflow:visible;}
   .wiz-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
   .wiz-grid-3{display:grid;grid-template-columns:repeat(3, 1fr);gap:14px;}
   .wiz-grid-5{display:grid;grid-template-columns:repeat(5, 1fr);gap:12px;}
@@ -109,7 +109,7 @@
     border-radius:999px;
     padding:8px 12px;
   }
-  .dx-list{display:grid;gap:10px;}
+  .dx-list{display:grid;gap:10px;overflow:visible;}
   .dx-row{
     display:grid;
     grid-template-columns:180px minmax(0, 1fr) 48px;
@@ -119,6 +119,7 @@
     border:1px solid #dbe6f3;
     border-radius:16px;
     background:#fff;
+    overflow:visible;
   }
   .dx-remove{min-height:50px;}
   .dx-suggest,
@@ -127,14 +128,14 @@
     left:0;
     right:0;
     top:100%;
-    margin-top:4px;
+    margin-top:6px;
     background:#fff;
     border:1px solid #dbe6f3;
     border-radius:14px;
-    box-shadow:0 14px 28px rgba(24,39,75,.12);
-    max-height:260px;
+    box-shadow:0 14px 28px rgba(24,39,75,.16);
+    max-height:280px;
     overflow:auto;
-    z-index:20;
+    z-index:1000;
     display:none;
   }
   .dx-suggest.open,
@@ -163,17 +164,25 @@
     margin-top:4px;
     font-size:13px;
     color:#334155;
+    line-height:1.35;
+    white-space:normal;
+    word-break:break-word;
   }
   .rx-option-name{
     font-size:13px;
     font-weight:800;
     color:#0b4dbb;
+    line-height:1.35;
+    white-space:normal;
+    word-break:break-word;
   }
   .rx-box{
     border:1px solid #dbe6f3;
     border-radius:18px;
     background:#fff;
-    overflow:hidden;
+    overflow:visible;
+    position:relative;
+    z-index:1;
   }
   .rx-head{
     display:grid;
@@ -192,6 +201,7 @@
     display:grid;
     gap:10px;
     padding:14px;
+    overflow:visible;
   }
   .rx-row{
     display:grid;
@@ -202,6 +212,12 @@
     border:1px solid #dbe6f3;
     border-radius:16px;
     background:#fbfdff;
+    overflow:visible;
+    position:relative;
+    z-index:1;
+  }
+  .rx-row:focus-within{
+    z-index:50;
   }
   .rx-remove{
     min-height:50px;
@@ -695,6 +711,14 @@
       .replace(/'/g, "&#039;");
   }
 
+  function normalizeText(value) {
+    return String(value || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim();
+  }
+
   function normalizeDxCode(value) {
     return (value || "")
       .toString()
@@ -785,7 +809,10 @@
       btn.className = "rx-option";
       btn.innerHTML = `
         <div class="rx-option-name">${escapeHtml(item.label || item.name || "")}</div>
-        <div class="rx-option-desc">${escapeHtml(item.presentation || "")}${item.common_directions ? " • " + escapeHtml(item.common_directions) : ""}</div>
+        <div class="rx-option-desc">
+          ${escapeHtml(item.presentation || "")}
+          ${item.common_directions ? "<br><span style='color:#64748b;font-size:12px;'>Posología sugerida: " + escapeHtml(item.common_directions) + "</span>" : ""}
+        </div>
       `;
       btn.addEventListener("mousedown", (e) => e.preventDefault());
       btn.addEventListener("click", () => onSelect(item));
@@ -854,6 +881,214 @@
     }
   }
 
+  function fallbackDirectionsFromMedication(item, label) {
+    const full = normalizeText([
+      item.name || "",
+      item.presentation || "",
+      item.label || "",
+      label || ""
+    ].join(" "));
+
+    if (full.includes("paracetamol") && full.includes("500 mg")) {
+      return "1 tableta cada 6-8 horas según dolor o fiebre por 3 a 5 días";
+    }
+    if (full.includes("paracetamol") && full.includes("1 g")) {
+      return "1 tableta cada 8 horas según dolor por 3 días";
+    }
+    if (full.includes("paracetamol") && (full.includes("jarabe") || full.includes("gotas"))) {
+      return "Administrar según peso cada 6-8 horas por 3 días";
+    }
+
+    if (full.includes("ibuprofeno") && full.includes("400 mg")) {
+      return "1 tableta cada 8 horas después de comidas por 3 a 5 días";
+    }
+    if (full.includes("ibuprofeno") && full.includes("600 mg")) {
+      return "1 tableta cada 8 horas después de comidas por corto tiempo";
+    }
+    if (full.includes("ibuprofeno") && full.includes("suspension")) {
+      return "Tomar según peso cada 8 horas por 3 días";
+    }
+
+    if (full.includes("naproxeno")) {
+      return "1 tableta cada 12 horas después de comidas por 3 a 5 días";
+    }
+    if (full.includes("diclofenaco")) {
+      return "1 tableta cada 8-12 horas después de comidas por 3 días";
+    }
+    if (full.includes("meloxicam")) {
+      return "1 tableta al día después de comidas por 5 días";
+    }
+
+    if (full.includes("omeprazol")) {
+      return "1 cápsula 30 minutos antes del desayuno por 14 días";
+    }
+    if (full.includes("esomeprazol")) {
+      return "1 cápsula antes del desayuno por 14 días";
+    }
+
+    if (full.includes("hioscina")) {
+      return "1 tableta cada 8 horas por 3 días si dolor tipo cólico";
+    }
+    if (full.includes("metoclopramida")) {
+      return "1 tableta cada 8 horas por 2 a 3 días si náusea";
+    }
+    if (full.includes("ondansetron") || full.includes("ondansetron") || full.includes("ondansetron") || full.includes("ondansetron")) {
+      return "1 tableta cada 12 horas por 2 días si náusea o vómito";
+    }
+
+    if (full.includes("loratadina")) {
+      return "1 tableta al día por 5 a 7 días";
+    }
+    if (full.includes("cetirizina")) {
+      return "1 tableta al día por 5 a 7 días";
+    }
+    if (full.includes("clorfenamina")) {
+      return "1 tableta cada 8 horas por 3 a 5 días";
+    }
+    if (full.includes("desloratadina")) {
+      return "1 tableta al día por 5 días";
+    }
+
+    if (full.includes("salbutamol") && full.includes("inhalador")) {
+      return "2 inhalaciones cada 6 a 8 horas según necesidad";
+    }
+    if (full.includes("salbutamol") && full.includes("nebul")) {
+      return "Nebulizar según prescripción médica y edad";
+    }
+    if (full.includes("budesonida")) {
+      return "1 a 2 inhalaciones cada 12 horas";
+    }
+    if (full.includes("prednisona")) {
+      return "1 tableta cada 12 horas por 3 a 5 días, según criterio clínico";
+    }
+    if (full.includes("dexametasona")) {
+      return "1 tableta cada 12 horas por corto tiempo según criterio clínico";
+    }
+
+    if (full.includes("amoxicilina") && !full.includes("clav")) {
+      if (full.includes("suspension")) {
+        return "5 mL cada 8 horas por 7 días, ajustar según peso y edad";
+      }
+      return "1 cápsula cada 8 horas por 7 días";
+    }
+    if (full.includes("amoxicilina") && full.includes("clav")) {
+      if (full.includes("suspension")) {
+        return "5 mL cada 12 horas por 7 días, ajustar según peso";
+      }
+      return "1 tableta cada 12 horas por 7 días";
+    }
+    if (full.includes("azitromicina")) {
+      if (full.includes("suspension")) {
+        return "Tomar según peso una vez al día por 3 días";
+      }
+      return "1 tableta al día por 3 días";
+    }
+    if (full.includes("cefalexina")) {
+      return "1 cápsula cada 6 horas por 7 días";
+    }
+    if (full.includes("cefuroxima")) {
+      return "1 tableta cada 12 horas por 7 días";
+    }
+
+    if (full.includes("nitrofurantoina")) {
+      return "1 cápsula cada 12 horas por 5 días";
+    }
+    if (full.includes("fosfomicina")) {
+      return "1 sobre dosis única disuelto en agua, preferible en la noche";
+    }
+    if (full.includes("ciprofloxacino")) {
+      return "1 tableta cada 12 horas por 5 a 7 días, según criterio clínico";
+    }
+
+    if (full.includes("fluconazol")) {
+      return "1 cápsula dosis única";
+    }
+    if (full.includes("clotrimazol") && full.includes("ovul")) {
+      return "1 óvulo vaginal cada noche por 6 días";
+    }
+    if (full.includes("metronidazol")) {
+      return "1 tableta cada 12 horas por 7 días";
+    }
+
+    if (full.includes("albendazol")) {
+      return full.includes("suspension") ? "10 mL dosis única" : "1 tableta dosis única";
+    }
+    if (full.includes("loperamida")) {
+      return "2 cápsulas iniciales y luego 1 cápsula después de cada deposición diarreica, máximo según inserto";
+    }
+    if (full.includes("sales de rehidratacion")) {
+      return "Preparar según indicación del sobre y tomar frecuentemente";
+    }
+
+    if (full.includes("losartan")) {
+      return "1 tableta al día";
+    }
+    if (full.includes("amlodipino")) {
+      return "1 tableta al día";
+    }
+    if (full.includes("enalapril")) {
+      return "1 tableta cada 12 a 24 horas según esquema";
+    }
+    if (full.includes("hidroclorotiazida")) {
+      return "1 tableta en la mañana";
+    }
+
+    if (full.includes("metformina")) {
+      return "1 tableta cada 12 horas con comidas";
+    }
+    if (full.includes("atorvastatina")) {
+      return "1 tableta en la noche";
+    }
+    if (full.includes("levotiroxina")) {
+      return "1 tableta en ayunas 30 minutos antes del desayuno";
+    }
+
+    if (full.includes("vitamina d")) {
+      return "1 cápsula al día";
+    }
+    if (full.includes("sulfato ferroso")) {
+      return "1 tableta al día o según esquema, idealmente lejos de lácteos";
+    }
+    if (full.includes("acido folico")) {
+      return "1 tableta al día";
+    }
+
+    if (full.includes("dextrometorfano")) {
+      return "Tomar según medida prescrita cada 8 horas por 3 a 5 días";
+    }
+    if (full.includes("ambroxol")) {
+      return "Tomar según medida prescrita cada 8 horas por 5 días";
+    }
+    if (full.includes("benzonatato")) {
+      return "1 cápsula cada 8 horas por 3 a 5 días";
+    }
+    if (full.includes("acetilcisteina")) {
+      return "1 sobre al día por 5 días";
+    }
+
+    if (full.includes("mupirocina")) {
+      return "Aplicar capa fina 3 veces al día por 5 a 7 días";
+    }
+    if (full.includes("clotrimazol") && full.includes("crema")) {
+      return "Aplicar 2 veces al día por 2 a 4 semanas";
+    }
+    if (full.includes("hidrocortisona")) {
+      return "Aplicar capa fina 2 veces al día por 3 a 5 días";
+    }
+
+    if (full.includes("lagrimas artificiales")) {
+      return "1 a 2 gotas en cada ojo cada 6 a 8 horas según necesidad";
+    }
+    if (full.includes("tobramicina")) {
+      return "1 gota en el ojo afectado cada 6 horas por 5 a 7 días";
+    }
+    if (full.includes("ciprofloxacino otico")) {
+      return "Aplicar 3 a 4 gotas cada 12 horas por 7 días";
+    }
+
+    return "";
+  }
+
   function addRxRow(prescription = "", indication = "") {
     const row = document.createElement("div");
     row.className = "rx-row";
@@ -890,8 +1125,15 @@
       const label = (item.label || item.name || "").trim();
       prescriptionInput.value = label;
 
-      if (!indicationInput.value.trim() && item.common_directions) {
-        indicationInput.value = item.common_directions;
+      if (!indicationInput.value.trim()) {
+        if (item.common_directions && item.common_directions.trim()) {
+          indicationInput.value = item.common_directions.trim();
+        } else {
+          const fallback = fallbackDirectionsFromMedication(item, label);
+          if (fallback) {
+            indicationInput.value = fallback;
+          }
+        }
       }
 
       closeSuggest(suggestBox);
@@ -914,8 +1156,15 @@
       }, 220);
     });
 
+    prescriptionInput.addEventListener("focus", async () => {
+      const value = prescriptionInput.value.trim();
+      if (value.length < 2) return;
+      const results = await searchMedications(value);
+      renderMedicationSuggest(suggestBox, results, chooseMedication);
+    });
+
     prescriptionInput.addEventListener("blur", () => {
-      setTimeout(() => closeSuggest(suggestBox), 150);
+      setTimeout(() => closeSuggest(suggestBox), 180);
     });
 
     indicationInput.addEventListener("input", syncRx);

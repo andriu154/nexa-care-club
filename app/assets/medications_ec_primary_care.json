@@ -2,17 +2,54 @@
   {
     "name": "Paracetamol",
     "presentation": "500 mg tabletas",
-    "common_directions": "1 tableta cada 8 horas por 3 a 5 días",
-    "keywords": ["acetaminofen", "fiebre", "dolor", "cefalea"],
+    "common_directions": "1 tableta cada 6-8 horas según dolor o fiebre por 3 a 5 días",
+    "keywords": ["acetaminofen", "fiebre", "dolor", "cefalea", "analgesico"],
     "brands": ["Panadol", "Tempra"]
   },
+  {
+    "name": "Paracetamol",
+    "presentation": "1 g tabletas",
+    "common_directions": "1 tableta cada 8 horas según dolor por 3 días",
+    "keywords": ["acetaminofen", "dolor intenso", "fiebre"],
+    "brands": ["Panadol"]
+  },
+  {
+    "name": "Paracetamol",
+    "presentation": "jarabe 120 mg/5 mL",
+    "common_directions": "Tomar según peso cada 6-8 horas por 3 a 5 días",
+    "keywords": ["pediatrico", "jarabe", "fiebre", "dolor"],
+    "brands": ["Tempra pediátrico", "Panadol niños"]
+  },
+  {
+    "name": "Paracetamol",
+    "presentation": "gotas pediátricas 100 mg/mL",
+    "common_directions": "Administrar según peso cada 6-8 horas por 3 días",
+    "keywords": ["gotas", "pediatrico", "fiebre", "dolor"],
+    "brands": ["Tempra gotas"]
+  },
+
   {
     "name": "Ibuprofeno",
     "presentation": "400 mg tabletas",
     "common_directions": "1 tableta cada 8 horas después de comidas por 3 a 5 días",
-    "keywords": ["dolor", "inflamacion", "fiebre", "odontalgia"],
+    "keywords": ["dolor", "inflamacion", "fiebre", "odontalgia", "aines"],
     "brands": ["Advil", "Motrin"]
   },
+  {
+    "name": "Ibuprofeno",
+    "presentation": "600 mg tabletas",
+    "common_directions": "1 tableta cada 8 horas después de comidas por corto tiempo",
+    "keywords": ["dolor", "inflamacion", "muscular", "lumbalgia"],
+    "brands": ["Advil Forte"]
+  },
+  {
+    "name": "Ibuprofeno",
+    "presentation": "suspensión 100 mg/5 mL",
+    "common_directions": "Tomar según peso cada 8 horas por 3 días",
+    "keywords": ["pediatrico", "fiebre", "dolor", "jarabe"],
+    "brands": ["Motrin suspensión"]
+  },
+
   {
     "name": "Naproxeno",
     "presentation": "500 mg tabletas",
@@ -23,7 +60,7 @@
   {
     "name": "Diclofenaco",
     "presentation": "50 mg tabletas",
-    "common_directions": "1 tableta cada 8 horas después de comidas por 3 días",
+    "common_directions": "1 tableta cada 8-12 horas después de comidas por 3 días",
     "keywords": ["dolor", "inflamacion", "trauma"],
     "brands": ["Voltaren"]
   },
@@ -34,6 +71,7 @@
     "keywords": ["dolor", "inflamacion", "articular"],
     "brands": ["Mobic"]
   },
+
   {
     "name": "Omeprazol",
     "presentation": "20 mg cápsulas",
@@ -48,6 +86,14 @@
     "keywords": ["gastritis", "reflujo", "esofagitis"],
     "brands": ["Nexium"]
   },
+  {
+    "name": "Antiácido de magnesio + aluminio",
+    "presentation": "suspensión oral",
+    "common_directions": "10 mL cada 8 horas por 3 a 5 días según síntomas",
+    "keywords": ["acidez", "gastritis", "antiacido", "pirosis"],
+    "brands": ["Maalox"]
+  },
+
   {
     "name": "Hioscina N-butilbromuro",
     "presentation": "10 mg tabletas",
@@ -69,6 +115,7 @@
     "keywords": ["nausea", "vomito"],
     "brands": ["Zofran"]
   },
+
   {
     "name": "Loratadina",
     "presentation": "10 mg tabletas",
@@ -91,11 +138,26 @@
     "brands": ["Clorotrimeton"]
   },
   {
+    "name": "Desloratadina",
+    "presentation": "5 mg tabletas",
+    "common_directions": "1 tableta al día por 5 días",
+    "keywords": ["alergia", "rinitis", "urticaria"],
+    "brands": ["Aerius"]
+  },
+
+  {
     "name": "Salbutamol",
     "presentation": "inhalador 100 mcg/dosis",
     "common_directions": "2 inhalaciones cada 6 a 8 horas según necesidad",
-    "keywords": ["asma", "broncoespasmo", "sibilancias", "tos"],
+    "keywords": ["asma", "broncoespasmo", "sibilancias", "tos", "ventolin"],
     "brands": ["Ventolin"]
+  },
+  {
+    "name": "Salbutamol",
+    "presentation": "solución para nebulización 5 mg/mL",
+    "common_directions": "Nebulizar según prescripción médica y edad",
+    "keywords": ["asma", "nebulizacion", "broncoespasmo", "sibilancias"],
+    "brands": ["Ventolin nebules"]
   },
   {
     "name": "Budesonida",
@@ -118,26 +180,48 @@
     "keywords": ["alergia", "inflamacion", "edema"],
     "brands": ["Decadron"]
   },
+
   {
     "name": "Amoxicilina",
     "presentation": "500 mg cápsulas",
     "common_directions": "1 cápsula cada 8 horas por 7 días",
-    "keywords": ["faringitis", "otitis", "sinusitis", "amigdalitis"],
+    "keywords": ["faringitis", "otitis", "sinusitis", "amigdalitis", "amox"],
     "brands": ["Amoxil"]
+  },
+  {
+    "name": "Amoxicilina",
+    "presentation": "suspensión 250 mg/5 mL",
+    "common_directions": "5 mL cada 8 horas por 7 días, ajustar según peso y edad",
+    "keywords": ["pediatrico", "amox", "jarabe", "suspension"],
+    "brands": ["Amoxil suspensión"]
   },
   {
     "name": "Amoxicilina + ácido clavulánico",
     "presentation": "875/125 mg tabletas",
     "common_directions": "1 tableta cada 12 horas por 7 días",
-    "keywords": ["sinusitis", "otitis", "infeccion respiratoria", "mordedura"],
+    "keywords": ["sinusitis", "otitis", "infeccion respiratoria", "mordedura", "augmentin", "clavulanico"],
     "brands": ["Augmentin"]
+  },
+  {
+    "name": "Amoxicilina + ácido clavulánico",
+    "presentation": "suspensión 400/57 mg/5 mL",
+    "common_directions": "5 mL cada 12 horas por 7 días, ajustar según peso",
+    "keywords": ["pediatrico", "augmentin", "clavulanico", "suspension"],
+    "brands": ["Augmentin suspensión"]
   },
   {
     "name": "Azitromicina",
     "presentation": "500 mg tabletas",
     "common_directions": "1 tableta al día por 3 días",
-    "keywords": ["faringitis", "bronquitis", "alergia penicilina"],
+    "keywords": ["faringitis", "bronquitis", "alergia penicilina", "azitro"],
     "brands": ["Zithromax"]
+  },
+  {
+    "name": "Azitromicina",
+    "presentation": "suspensión 200 mg/5 mL",
+    "common_directions": "Tomar según peso una vez al día por 3 días",
+    "keywords": ["pediatrico", "azitro", "suspension"],
+    "brands": ["Zithromax suspensión"]
   },
   {
     "name": "Cefalexina",
@@ -153,27 +237,29 @@
     "keywords": ["sinusitis", "bronquitis", "otitis"],
     "brands": ["Zinnat"]
   },
+
   {
     "name": "Nitrofurantoína",
     "presentation": "100 mg cápsulas",
     "common_directions": "1 cápsula cada 12 horas por 5 días",
-    "keywords": ["itu", "cistitis", "infeccion urinaria"],
+    "keywords": ["itu", "cistitis", "infeccion urinaria", "nitrofurantoina"],
     "brands": ["Macrodantina"]
   },
   {
     "name": "Fosfomicina",
     "presentation": "3 g sobre",
     "common_directions": "1 sobre dosis única disuelto en agua, preferible en la noche",
-    "keywords": ["itu", "cistitis", "infeccion urinaria"],
+    "keywords": ["itu", "cistitis", "infeccion urinaria", "fosfomicina"],
     "brands": ["Monurol"]
   },
   {
     "name": "Ciprofloxacino",
     "presentation": "500 mg tabletas",
     "common_directions": "1 tableta cada 12 horas por 5 a 7 días, según criterio clínico",
-    "keywords": ["itu", "gastroenteritis", "infeccion bacteriana"],
+    "keywords": ["itu", "gastroenteritis", "infeccion bacteriana", "cipro"],
     "brands": ["Cipro"]
   },
+
   {
     "name": "Fluconazol",
     "presentation": "150 mg cápsula",
@@ -195,12 +281,20 @@
     "keywords": ["vaginosis", "amibiasis", "giardiasis"],
     "brands": ["Flagyl"]
   },
+
   {
     "name": "Albendazol",
     "presentation": "400 mg tabletas",
     "common_directions": "1 tableta dosis única",
     "keywords": ["parasitosis", "helmintos"],
     "brands": ["Zentel"]
+  },
+  {
+    "name": "Albendazol",
+    "presentation": "suspensión 400 mg/10 mL",
+    "common_directions": "10 mL dosis única",
+    "keywords": ["parasitosis", "helmintos", "pediatrico", "suspension"],
+    "brands": ["Zentel suspensión"]
   },
   {
     "name": "Loperamida",
@@ -213,14 +307,15 @@
     "name": "Sales de rehidratación oral",
     "presentation": "sobres",
     "common_directions": "Preparar según indicación del sobre y tomar frecuentemente",
-    "keywords": ["diarrea", "deshidratacion", "gastroenteritis"],
+    "keywords": ["diarrea", "deshidratacion", "gastroenteritis", "sro"],
     "brands": ["Pedialyte", "Electrolit"]
   },
+
   {
     "name": "Losartán",
     "presentation": "50 mg tabletas",
     "common_directions": "1 tableta al día",
-    "keywords": ["hipertension", "hta"],
+    "keywords": ["hipertension", "hta", "losartan"],
     "brands": ["Cozaar"]
   },
   {
@@ -244,6 +339,7 @@
     "keywords": ["hipertension", "edema"],
     "brands": ["Esidrex"]
   },
+
   {
     "name": "Metformina",
     "presentation": "850 mg tabletas",
@@ -265,6 +361,7 @@
     "keywords": ["hipotiroidismo", "tiroides"],
     "brands": ["Eutirox"]
   },
+
   {
     "name": "Vitamina D3",
     "presentation": "1000 UI cápsulas",
@@ -286,18 +383,19 @@
     "keywords": ["embarazo", "anemia", "suplemento"],
     "brands": ["Acfol"]
   },
+
   {
     "name": "Dextrometorfano",
     "presentation": "jarabe",
     "common_directions": "Tomar según medida prescrita cada 8 horas por 3 a 5 días",
-    "keywords": ["tos seca", "resfriado"],
+    "keywords": ["tos seca", "resfriado", "jarabe"],
     "brands": ["Bisolvon antitusivo"]
   },
   {
     "name": "Ambroxol",
     "presentation": "jarabe",
     "common_directions": "Tomar según medida prescrita cada 8 horas por 5 días",
-    "keywords": ["tos productiva", "mucosidad"],
+    "keywords": ["tos productiva", "mucosidad", "jarabe"],
     "brands": ["Mucosolvan"]
   },
   {
@@ -307,6 +405,14 @@
     "keywords": ["tos seca"],
     "brands": ["Tessalon"]
   },
+  {
+    "name": "Acetilcisteína",
+    "presentation": "600 mg sobres",
+    "common_directions": "1 sobre al día por 5 días",
+    "keywords": ["mucolitico", "tos productiva", "flema"],
+    "brands": ["Fluimucil"]
+  },
+
   {
     "name": "Mupirocina",
     "presentation": "ungüento tópico 2%",
@@ -329,10 +435,32 @@
     "brands": ["Cortaid"]
   },
   {
+    "name": "Loratadina + betametasona",
+    "presentation": "jarabe",
+    "common_directions": "Tomar según medida prescrita cada 12 horas por corto tiempo",
+    "keywords": ["alergia", "jarabe", "rinitis"],
+    "brands": ["Celestamine"]
+  },
+
+  {
     "name": "Lágrimas artificiales",
     "presentation": "gotas oftálmicas",
     "common_directions": "1 a 2 gotas en cada ojo cada 6 a 8 horas según necesidad",
     "keywords": ["ojo seco", "irritacion ocular"],
     "brands": ["Refresh", "Systane"]
+  },
+  {
+    "name": "Tobramicina",
+    "presentation": "gotas oftálmicas 0.3%",
+    "common_directions": "1 gota en el ojo afectado cada 6 horas por 5 a 7 días",
+    "keywords": ["conjuntivitis", "ojo", "gotas"],
+    "brands": ["Tobrex"]
+  },
+  {
+    "name": "Ciprofloxacino ótico",
+    "presentation": "gotas óticas",
+    "common_directions": "Aplicar 3 a 4 gotas cada 12 horas por 7 días",
+    "keywords": ["otitis externa", "oido", "gotas"],
+    "brands": ["Cetraxal"]
   }
 ]
