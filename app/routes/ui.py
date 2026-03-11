@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import os
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -10,6 +10,7 @@ import pandas as pd
 from fastapi import APIRouter, Depends, Request, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
@@ -21,6 +22,7 @@ templates = Jinja2Templates(directory="app/templates")
 
 APP_TZ = ZoneInfo(os.getenv("APP_TIMEZONE", "America/Guayaquil"))
 CIE10_FILE = Path("app/assets/cie10.xlsx")
+MEDICATIONS_FILE = Path("app/assets/medications_ec_primary_care.json")
 
 DOCTOR_CANONICAL = {
     "1750785220": {
@@ -375,6 +377,84 @@ def _normalize_prescription_json(raw_value) -> str:
     return json.dumps(cleaned, ensure_ascii=False)
 
 
+def _patient_age_years(patient: Patient | None) -> int | None:
+    birth_date = getattr(patient, "birth_date", None) if patient else None
+    if not birth_date:
+        return None
+
+    today = date.today()
+    years = today.year - birth_date.year - (
+        (today.month, today.day) < (birth_date.month, birth_date.day)
+    )
+    return years
+
+
+def _ensure_patient_schema(db: Session):
+    try:
+        inspector = inspect(db.bind)
+        columns = {col["name"] for col in inspector.get_columns("patients")}
+    except Exception as e:
+        print("⚠️ No se pudo inspeccionar patients:", repr(e))
+        return
+
+    pending_sql = []
+
+    if "birth_date" not in columns:
+        pending_sql.append("ALTER TABLE patients ADD COLUMN birth_date DATE")
+
+    if not pending_sql:
+        return
+
+    try:
+        for sql in pending_sql:
+            db.execute(text(sql))
+        db.commit()
+        print("✅ Migración: patients.birth_date agregado")
+    except Exception as e:
+        db.rollback()
+        print("⚠️ Error agregando columnas a patients:", repr(e))
+
+
+def _ensure_clinical_note_schema(db: Session):
+    try:
+        inspector = inspect(db.bind)
+        columns = {col["name"] for col in inspector.get_columns("clinical_notes")}
+    except Exception as e:
+        print("⚠️ No se pudo inspeccionar clinical_notes:", repr(e))
+        return
+
+    expected = {
+        "personal_history": "TEXT",
+        "family_history": "TEXT",
+        "surgical_history": "TEXT",
+        "allergies": "TEXT",
+        "patient_sex": "VARCHAR(20)",
+        "last_menstrual_period": "VARCHAR(50)",
+        "gestas": "INTEGER",
+        "vaginal_deliveries": "INTEGER",
+        "c_sections": "INTEGER",
+        "abortions": "INTEGER",
+        "living_children": "INTEGER",
+    }
+
+    pending_sql = []
+    for col_name, col_type in expected.items():
+        if col_name not in columns:
+            pending_sql.append(f"ALTER TABLE clinical_notes ADD COLUMN {col_name} {col_type}")
+
+    if not pending_sql:
+        return
+
+    try:
+        for sql in pending_sql:
+            db.execute(text(sql))
+        db.commit()
+        print("✅ Migración: clinical_notes antecedentes/gineco agregado")
+    except Exception as e:
+        db.rollback()
+        print("⚠️ Error agregando columnas a clinical_notes:", repr(e))
+
+
 def _load_cie10_data():
     items = []
     seen = set()
@@ -430,7 +510,60 @@ def _load_cie10_data():
         return []
 
 
+def _load_medications_data():
+    if not MEDICATIONS_FILE.exists():
+        print(f"⚠️ Archivo de medicamentos no encontrado: {MEDICATIONS_FILE}")
+        return []
+
+    try:
+        raw = json.loads(MEDICATIONS_FILE.read_text(encoding="utf-8"))
+        if not isinstance(raw, list):
+            return []
+
+        cleaned = []
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+
+            name = str(item.get("name") or "").strip()
+            presentation = str(item.get("presentation") or "").strip()
+            common_directions = str(item.get("common_directions") or "").strip()
+            keywords = item.get("keywords") or []
+            if not isinstance(keywords, list):
+                keywords = []
+
+            brands = item.get("brands") or []
+            if not isinstance(brands, list):
+                brands = []
+
+            if not name:
+                continue
+
+            label = name
+            if presentation:
+                label = f"{name} {presentation}"
+
+            cleaned.append(
+                {
+                    "name": name,
+                    "presentation": presentation,
+                    "label": label.strip(),
+                    "common_directions": common_directions,
+                    "keywords": [str(x).strip() for x in keywords if str(x).strip()],
+                    "brands": [str(x).strip() for x in brands if str(x).strip()],
+                }
+            )
+
+        print(f"✅ Medicamentos cargados: {len(cleaned)} registros")
+        return cleaned
+
+    except Exception as e:
+        print("⚠️ Error cargando archivo de medicamentos:", repr(e))
+        return []
+
+
 CIE10_DATA = _load_cie10_data()
+MEDICATIONS_DATA = _load_medications_data()
 
 
 def _expand_smart_query(query: str) -> list[str]:
@@ -552,6 +685,62 @@ def _search_local_cie10(query: str, limit: int = 15):
     return [x[3] for x in scored[:limit]]
 
 
+def _search_local_medications(query: str, limit: int = 12):
+    q = _normalize_search_text(query)
+    if len(q) < 2:
+        return []
+
+    q_tokens = [tok for tok in q.split() if tok]
+    scored = []
+
+    for item in MEDICATIONS_DATA:
+        haystack_parts = [
+            item.get("name") or "",
+            item.get("presentation") or "",
+            item.get("label") or "",
+            " ".join(item.get("keywords") or []),
+            " ".join(item.get("brands") or []),
+        ]
+        haystack = _normalize_search_text(" ".join(haystack_parts))
+        if not haystack:
+            continue
+
+        score = None
+
+        if haystack == q:
+            score = 100
+        elif haystack.startswith(q):
+            score = 92
+        elif q in haystack:
+            score = 84
+        else:
+            overlap = sum(1 for tok in q_tokens if tok in haystack)
+            if overlap == len(q_tokens) and overlap > 0:
+                score = 76
+            elif overlap >= 1:
+                score = 60 + overlap
+
+        if score is None:
+            continue
+
+        scored.append(
+            (
+                score,
+                len(item.get("label") or ""),
+                item.get("label") or "",
+                {
+                    "name": item.get("name") or "",
+                    "presentation": item.get("presentation") or "",
+                    "label": item.get("label") or "",
+                    "common_directions": item.get("common_directions") or "",
+                },
+            )
+        )
+
+    scored.sort(key=lambda x: (-x[0], x[1], x[2]))
+    return [x[3] for x in scored[:limit]]
+
+
 @router.get("/cie10/search")
 def ui_cie10_search(
     request: Request,
@@ -570,6 +759,24 @@ def ui_cie10_search(
     return JSONResponse({"ok": True, "results": results})
 
 
+@router.get("/medications/search")
+def ui_medications_search(
+    request: Request,
+    q: str = "",
+    db: Session = Depends(get_db),
+):
+    current_doctor = _require_login(request, db)
+    if not current_doctor:
+        return JSONResponse({"ok": False, "error": "Sesión expirada"}, status_code=401)
+
+    query = (q or "").strip()
+    if len(query) < 2:
+        return JSONResponse({"ok": True, "results": []})
+
+    results = _search_local_medications(query, limit=12)
+    return JSONResponse({"ok": True, "results": results})
+
+
 @router.get("", response_class=HTMLResponse)
 @router.get("/", response_class=HTMLResponse)
 def ui_dashboard(
@@ -581,6 +788,8 @@ def ui_dashboard(
     current_doctor = _require_login(request, db)
     if not current_doctor:
         return _redirect_login()
+
+    _ensure_patient_schema(db)
 
     base_date = _parse_date(date) or datetime.now(APP_TZ).date()
     start_date = base_date - timedelta(days=1)
@@ -652,6 +861,8 @@ def ui_start_appointment(appointment_id: int, request: Request, db: Session = De
     if not current_doctor:
         return _redirect_login()
 
+    _ensure_patient_schema(db)
+
     appt = (
         db.query(Appointment)
         .filter(Appointment.id == appointment_id)
@@ -705,6 +916,8 @@ def ui_patients(
     if not current_doctor:
         return _redirect_login()
 
+    _ensure_patient_schema(db)
+
     search = (q or "").strip()
 
     query = db.query(Patient)
@@ -719,6 +932,9 @@ def ui_patients(
         )
 
     patients = query.order_by(Patient.id.desc()).all()
+
+    for p in patients:
+        p.age_years = _patient_age_years(p)
 
     total_patients = db.query(Patient).count()
     active_patients = db.query(Patient).filter(Patient.status == "Activo").count()
@@ -743,9 +959,13 @@ def ui_patient_detail(patient_id: int, request: Request, db: Session = Depends(g
     if not current_doctor:
         return _redirect_login()
 
+    _ensure_patient_schema(db)
+
     patient = db.query(Patient).filter(Patient.id == patient_id).first()
     if not patient:
         raise HTTPException(status_code=404, detail="Paciente no encontrado")
+
+    patient.age_years = _patient_age_years(patient)
 
     encounters = (
         db.query(Encounter)
@@ -777,6 +997,8 @@ def ui_new_encounter(patient_id: int, request: Request, db: Session = Depends(ge
     if not current_doctor:
         return _redirect_login()
 
+    _ensure_patient_schema(db)
+
     patient = db.query(Patient).filter(Patient.id == patient_id).first()
     if not patient:
         raise HTTPException(status_code=404, detail="Paciente no encontrado")
@@ -804,12 +1026,18 @@ def ui_encounter(encounter_id: int, request: Request, db: Session = Depends(get_
     if not current_doctor:
         return _redirect_login()
 
+    _ensure_patient_schema(db)
+    _ensure_clinical_note_schema(db)
+
     enc = db.query(Encounter).filter(Encounter.id == encounter_id).first()
     if not enc:
         raise HTTPException(status_code=404, detail="Consulta no encontrada")
 
     patient = db.query(Patient).filter(Patient.id == enc.patient_id).first()
     doc = db.query(Doctor).filter(Doctor.id == enc.doctor_id).first()
+
+    if patient:
+        patient.age_years = _patient_age_years(patient)
 
     note = db.query(ClinicalNote).filter(ClinicalNote.encounter_id == encounter_id).first()
     evols = (
@@ -849,6 +1077,9 @@ async def ui_save_note(encounter_id: int, request: Request, db: Session = Depend
             return JSONResponse({"ok": False, "error": "Sesión expirada"}, status_code=401)
         return _redirect_login()
 
+    _ensure_patient_schema(db)
+    _ensure_clinical_note_schema(db)
+
     enc = db.query(Encounter).filter(Encounter.id == encounter_id).first()
     if not enc:
         raise HTTPException(status_code=404, detail="Consulta no encontrada")
@@ -875,6 +1106,14 @@ async def ui_save_note(encounter_id: int, request: Request, db: Session = Depend
 
     note.chief_complaint = (form.get("chief_complaint") or "").strip()
     note.hpi = (form.get("hpi") or "").strip()
+
+    note.personal_history = (form.get("personal_history") or "").strip()
+    note.family_history = (form.get("family_history") or "").strip()
+    note.surgical_history = (form.get("surgical_history") or "").strip()
+    note.allergies = (form.get("allergies") or "").strip()
+    note.patient_sex = (form.get("patient_sex") or "").strip()[:20]
+    note.last_menstrual_period = (form.get("last_menstrual_period") or "").strip()[:50]
+
     note.physical_exam = (form.get("physical_exam") or "").strip()
     note.complementary_tests = (form.get("complementary_tests") or "").strip()
     note.assessment_dx = (form.get("assessment_dx") or "").strip()
@@ -890,6 +1129,12 @@ async def ui_save_note(encounter_id: int, request: Request, db: Session = Depend
             return int(v)
         except Exception:
             return None
+
+    note.gestas = to_int(form.get("gestas"))
+    note.vaginal_deliveries = to_int(form.get("vaginal_deliveries"))
+    note.c_sections = to_int(form.get("c_sections"))
+    note.abortions = to_int(form.get("abortions"))
+    note.living_children = to_int(form.get("living_children"))
 
     note.ta_sys = to_int(form.get("ta_sys"))
     note.ta_dia = to_int(form.get("ta_dia"))

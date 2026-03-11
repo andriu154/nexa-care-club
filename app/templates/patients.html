@@ -157,7 +157,7 @@
 
   .patient-grid{
     display:grid;
-    grid-template-columns:repeat(4, minmax(0, 1fr));
+    grid-template-columns:repeat(5, minmax(0, 1fr));
     gap:10px;
   }
 
@@ -323,6 +323,16 @@
                 <div class="patient-box">
                   <div class="patient-box-label">Teléfono</div>
                   <div class="patient-box-value">{{ p.phone if p.phone else "—" }}</div>
+                </div>
+
+                <div class="patient-box">
+                  <div class="patient-box-label">Fecha nacimiento</div>
+                  <div class="patient-box-value">{{ p.birth_date.strftime("%Y-%m-%d") if p.birth_date else "—" }}</div>
+                </div>
+
+                <div class="patient-box">
+                  <div class="patient-box-label">Edad</div>
+                  <div class="patient-box-value">{{ p.age_years if p.age_years is not none else "—" }}</div>
                 </div>
 
                 <div class="patient-box">

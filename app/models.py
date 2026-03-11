@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Boolean, Date
 from sqlalchemy.orm import relationship
 
 from .database import Base
@@ -39,6 +39,8 @@ class Patient(Base):
 
     full_name = Column(String, nullable=False)
     qr_code = Column(String, unique=True, index=True, nullable=True)
+
+    birth_date = Column(Date, nullable=True)
 
     total_sessions = Column(Integer, default=0, nullable=False)
     completed_sessions = Column(Integer, default=0, nullable=False)
@@ -125,6 +127,19 @@ class ClinicalNote(Base):
 
     chief_complaint = Column(Text, nullable=True)
     hpi = Column(Text, nullable=True)
+
+    personal_history = Column(Text, nullable=True)
+    family_history = Column(Text, nullable=True)
+    surgical_history = Column(Text, nullable=True)
+    allergies = Column(Text, nullable=True)
+    patient_sex = Column(String, nullable=True)
+    last_menstrual_period = Column(String, nullable=True)
+
+    gestas = Column(Integer, nullable=True)
+    vaginal_deliveries = Column(Integer, nullable=True)
+    c_sections = Column(Integer, nullable=True)
+    abortions = Column(Integer, nullable=True)
+    living_children = Column(Integer, nullable=True)
 
     physical_exam = Column(Text, nullable=True)
     complementary_tests = Column(Text, nullable=True)

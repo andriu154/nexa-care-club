@@ -1,0 +1,338 @@
+[
+  {
+    "name": "Paracetamol",
+    "presentation": "500 mg tabletas",
+    "common_directions": "1 tableta cada 8 horas por 3 a 5 días",
+    "keywords": ["acetaminofen", "fiebre", "dolor", "cefalea"],
+    "brands": ["Panadol", "Tempra"]
+  },
+  {
+    "name": "Ibuprofeno",
+    "presentation": "400 mg tabletas",
+    "common_directions": "1 tableta cada 8 horas después de comidas por 3 a 5 días",
+    "keywords": ["dolor", "inflamacion", "fiebre", "odontalgia"],
+    "brands": ["Advil", "Motrin"]
+  },
+  {
+    "name": "Naproxeno",
+    "presentation": "500 mg tabletas",
+    "common_directions": "1 tableta cada 12 horas después de comidas por 3 a 5 días",
+    "keywords": ["dolor", "inflamacion", "lumbalgia", "artralgia"],
+    "brands": ["Apronax"]
+  },
+  {
+    "name": "Diclofenaco",
+    "presentation": "50 mg tabletas",
+    "common_directions": "1 tableta cada 8 horas después de comidas por 3 días",
+    "keywords": ["dolor", "inflamacion", "trauma"],
+    "brands": ["Voltaren"]
+  },
+  {
+    "name": "Meloxicam",
+    "presentation": "15 mg tabletas",
+    "common_directions": "1 tableta al día después de comidas por 5 días",
+    "keywords": ["dolor", "inflamacion", "articular"],
+    "brands": ["Mobic"]
+  },
+  {
+    "name": "Omeprazol",
+    "presentation": "20 mg cápsulas",
+    "common_directions": "1 cápsula 30 minutos antes del desayuno por 14 días",
+    "keywords": ["gastritis", "reflujo", "pirosis", "dispepsia"],
+    "brands": ["Losec"]
+  },
+  {
+    "name": "Esomeprazol",
+    "presentation": "40 mg cápsulas",
+    "common_directions": "1 cápsula antes del desayuno por 14 días",
+    "keywords": ["gastritis", "reflujo", "esofagitis"],
+    "brands": ["Nexium"]
+  },
+  {
+    "name": "Hioscina N-butilbromuro",
+    "presentation": "10 mg tabletas",
+    "common_directions": "1 tableta cada 8 horas por 3 días si dolor tipo cólico",
+    "keywords": ["colico", "dolor abdominal", "espasmo"],
+    "brands": ["Buscapina"]
+  },
+  {
+    "name": "Metoclopramida",
+    "presentation": "10 mg tabletas",
+    "common_directions": "1 tableta cada 8 horas por 2 a 3 días si náusea",
+    "keywords": ["nausea", "vomito", "gastroenteritis"],
+    "brands": ["Plasil"]
+  },
+  {
+    "name": "Ondansetrón",
+    "presentation": "8 mg tabletas",
+    "common_directions": "1 tableta cada 12 horas por 2 días si náusea o vómito",
+    "keywords": ["nausea", "vomito"],
+    "brands": ["Zofran"]
+  },
+  {
+    "name": "Loratadina",
+    "presentation": "10 mg tabletas",
+    "common_directions": "1 tableta al día por 5 a 7 días",
+    "keywords": ["alergia", "rinitis", "urticaria", "prurito"],
+    "brands": ["Claritin"]
+  },
+  {
+    "name": "Cetirizina",
+    "presentation": "10 mg tabletas",
+    "common_directions": "1 tableta al día por 5 a 7 días",
+    "keywords": ["alergia", "rinitis", "urticaria"],
+    "brands": ["Zyrtec"]
+  },
+  {
+    "name": "Clorfenamina",
+    "presentation": "4 mg tabletas",
+    "common_directions": "1 tableta cada 8 horas por 3 a 5 días",
+    "keywords": ["alergia", "prurito", "rinitis"],
+    "brands": ["Clorotrimeton"]
+  },
+  {
+    "name": "Salbutamol",
+    "presentation": "inhalador 100 mcg/dosis",
+    "common_directions": "2 inhalaciones cada 6 a 8 horas según necesidad",
+    "keywords": ["asma", "broncoespasmo", "sibilancias", "tos"],
+    "brands": ["Ventolin"]
+  },
+  {
+    "name": "Budesonida",
+    "presentation": "inhalador 200 mcg/dosis",
+    "common_directions": "1 a 2 inhalaciones cada 12 horas",
+    "keywords": ["asma", "controlador", "bronquitis"],
+    "brands": ["Pulmicort"]
+  },
+  {
+    "name": "Prednisona",
+    "presentation": "20 mg tabletas",
+    "common_directions": "1 tableta cada 12 horas por 3 a 5 días, según criterio clínico",
+    "keywords": ["asma", "alergia", "inflamacion"],
+    "brands": ["Deltasone"]
+  },
+  {
+    "name": "Dexametasona",
+    "presentation": "4 mg tabletas",
+    "common_directions": "1 tableta cada 12 horas por corto tiempo según criterio clínico",
+    "keywords": ["alergia", "inflamacion", "edema"],
+    "brands": ["Decadron"]
+  },
+  {
+    "name": "Amoxicilina",
+    "presentation": "500 mg cápsulas",
+    "common_directions": "1 cápsula cada 8 horas por 7 días",
+    "keywords": ["faringitis", "otitis", "sinusitis", "amigdalitis"],
+    "brands": ["Amoxil"]
+  },
+  {
+    "name": "Amoxicilina + ácido clavulánico",
+    "presentation": "875/125 mg tabletas",
+    "common_directions": "1 tableta cada 12 horas por 7 días",
+    "keywords": ["sinusitis", "otitis", "infeccion respiratoria", "mordedura"],
+    "brands": ["Augmentin"]
+  },
+  {
+    "name": "Azitromicina",
+    "presentation": "500 mg tabletas",
+    "common_directions": "1 tableta al día por 3 días",
+    "keywords": ["faringitis", "bronquitis", "alergia penicilina"],
+    "brands": ["Zithromax"]
+  },
+  {
+    "name": "Cefalexina",
+    "presentation": "500 mg cápsulas",
+    "common_directions": "1 cápsula cada 6 horas por 7 días",
+    "keywords": ["celulitis", "faringitis", "infeccion piel"],
+    "brands": ["Keflex"]
+  },
+  {
+    "name": "Cefuroxima",
+    "presentation": "500 mg tabletas",
+    "common_directions": "1 tableta cada 12 horas por 7 días",
+    "keywords": ["sinusitis", "bronquitis", "otitis"],
+    "brands": ["Zinnat"]
+  },
+  {
+    "name": "Nitrofurantoína",
+    "presentation": "100 mg cápsulas",
+    "common_directions": "1 cápsula cada 12 horas por 5 días",
+    "keywords": ["itu", "cistitis", "infeccion urinaria"],
+    "brands": ["Macrodantina"]
+  },
+  {
+    "name": "Fosfomicina",
+    "presentation": "3 g sobre",
+    "common_directions": "1 sobre dosis única disuelto en agua, preferible en la noche",
+    "keywords": ["itu", "cistitis", "infeccion urinaria"],
+    "brands": ["Monurol"]
+  },
+  {
+    "name": "Ciprofloxacino",
+    "presentation": "500 mg tabletas",
+    "common_directions": "1 tableta cada 12 horas por 5 a 7 días, según criterio clínico",
+    "keywords": ["itu", "gastroenteritis", "infeccion bacteriana"],
+    "brands": ["Cipro"]
+  },
+  {
+    "name": "Fluconazol",
+    "presentation": "150 mg cápsula",
+    "common_directions": "1 cápsula dosis única",
+    "keywords": ["candidiasis", "vaginitis", "hongos"],
+    "brands": ["Diflucan"]
+  },
+  {
+    "name": "Clotrimazol",
+    "presentation": "óvulos vaginales 100 mg",
+    "common_directions": "1 óvulo vaginal cada noche por 6 días",
+    "keywords": ["candidiasis", "vaginitis"],
+    "brands": ["Canesten"]
+  },
+  {
+    "name": "Metronidazol",
+    "presentation": "500 mg tabletas",
+    "common_directions": "1 tableta cada 12 horas por 7 días",
+    "keywords": ["vaginosis", "amibiasis", "giardiasis"],
+    "brands": ["Flagyl"]
+  },
+  {
+    "name": "Albendazol",
+    "presentation": "400 mg tabletas",
+    "common_directions": "1 tableta dosis única",
+    "keywords": ["parasitosis", "helmintos"],
+    "brands": ["Zentel"]
+  },
+  {
+    "name": "Loperamida",
+    "presentation": "2 mg cápsulas",
+    "common_directions": "2 cápsulas iniciales y luego 1 cápsula después de cada deposición diarreica, máximo según inserto",
+    "keywords": ["diarrea"],
+    "brands": ["Imodium"]
+  },
+  {
+    "name": "Sales de rehidratación oral",
+    "presentation": "sobres",
+    "common_directions": "Preparar según indicación del sobre y tomar frecuentemente",
+    "keywords": ["diarrea", "deshidratacion", "gastroenteritis"],
+    "brands": ["Pedialyte", "Electrolit"]
+  },
+  {
+    "name": "Losartán",
+    "presentation": "50 mg tabletas",
+    "common_directions": "1 tableta al día",
+    "keywords": ["hipertension", "hta"],
+    "brands": ["Cozaar"]
+  },
+  {
+    "name": "Amlodipino",
+    "presentation": "5 mg tabletas",
+    "common_directions": "1 tableta al día",
+    "keywords": ["hipertension", "hta"],
+    "brands": ["Norvasc"]
+  },
+  {
+    "name": "Enalapril",
+    "presentation": "10 mg tabletas",
+    "common_directions": "1 tableta cada 12 a 24 horas según esquema",
+    "keywords": ["hipertension", "hta"],
+    "brands": ["Renitec"]
+  },
+  {
+    "name": "Hidroclorotiazida",
+    "presentation": "25 mg tabletas",
+    "common_directions": "1 tableta en la mañana",
+    "keywords": ["hipertension", "edema"],
+    "brands": ["Esidrex"]
+  },
+  {
+    "name": "Metformina",
+    "presentation": "850 mg tabletas",
+    "common_directions": "1 tableta cada 12 horas con comidas",
+    "keywords": ["diabetes", "dm2"],
+    "brands": ["Glucophage"]
+  },
+  {
+    "name": "Atorvastatina",
+    "presentation": "20 mg tabletas",
+    "common_directions": "1 tableta en la noche",
+    "keywords": ["dislipidemia", "colesterol"],
+    "brands": ["Lipitor"]
+  },
+  {
+    "name": "Levotiroxina",
+    "presentation": "50 mcg tabletas",
+    "common_directions": "1 tableta en ayunas 30 minutos antes del desayuno",
+    "keywords": ["hipotiroidismo", "tiroides"],
+    "brands": ["Eutirox"]
+  },
+  {
+    "name": "Vitamina D3",
+    "presentation": "1000 UI cápsulas",
+    "common_directions": "1 cápsula al día",
+    "keywords": ["deficiencia vitamina d", "osteopenia"],
+    "brands": ["D3"]
+  },
+  {
+    "name": "Sulfato ferroso",
+    "presentation": "325 mg tabletas",
+    "common_directions": "1 tableta al día o según esquema, idealmente lejos de lácteos",
+    "keywords": ["anemia", "hierro"],
+    "brands": ["Fero-Grad"]
+  },
+  {
+    "name": "Ácido fólico",
+    "presentation": "1 mg tabletas",
+    "common_directions": "1 tableta al día",
+    "keywords": ["embarazo", "anemia", "suplemento"],
+    "brands": ["Acfol"]
+  },
+  {
+    "name": "Dextrometorfano",
+    "presentation": "jarabe",
+    "common_directions": "Tomar según medida prescrita cada 8 horas por 3 a 5 días",
+    "keywords": ["tos seca", "resfriado"],
+    "brands": ["Bisolvon antitusivo"]
+  },
+  {
+    "name": "Ambroxol",
+    "presentation": "jarabe",
+    "common_directions": "Tomar según medida prescrita cada 8 horas por 5 días",
+    "keywords": ["tos productiva", "mucosidad"],
+    "brands": ["Mucosolvan"]
+  },
+  {
+    "name": "Benzonatato",
+    "presentation": "100 mg cápsulas",
+    "common_directions": "1 cápsula cada 8 horas por 3 a 5 días",
+    "keywords": ["tos seca"],
+    "brands": ["Tessalon"]
+  },
+  {
+    "name": "Mupirocina",
+    "presentation": "ungüento tópico 2%",
+    "common_directions": "Aplicar capa fina 3 veces al día por 5 a 7 días",
+    "keywords": ["impetigo", "infeccion piel", "herida"],
+    "brands": ["Bactroban"]
+  },
+  {
+    "name": "Clotrimazol",
+    "presentation": "crema tópica 1%",
+    "common_directions": "Aplicar 2 veces al día por 2 a 4 semanas",
+    "keywords": ["hongos piel", "tiña", "dermatofitosis"],
+    "brands": ["Canesten"]
+  },
+  {
+    "name": "Hidrocortisona",
+    "presentation": "crema tópica 1%",
+    "common_directions": "Aplicar capa fina 2 veces al día por 3 a 5 días",
+    "keywords": ["dermatitis", "alergia", "prurito"],
+    "brands": ["Cortaid"]
+  },
+  {
+    "name": "Lágrimas artificiales",
+    "presentation": "gotas oftálmicas",
+    "common_directions": "1 a 2 gotas en cada ojo cada 6 a 8 horas según necesidad",
+    "keywords": ["ojo seco", "irritacion ocular"],
+    "brands": ["Refresh", "Systane"]
+  }
+]

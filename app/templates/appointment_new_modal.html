@@ -51,6 +51,8 @@
           <div class="appt-patient-meta">
             Cédula: {{ patient_found.cedula if patient_found.cedula else "—" }}
             {% if patient_found.phone %} • Tel: {{ patient_found.phone }}{% endif %}
+            {% if patient_found.birth_date %} • Nacimiento: {{ patient_found.birth_date.strftime("%Y-%m-%d") }}{% endif %}
+            {% if patient_found.age_years is not none %} • Edad: {{ patient_found.age_years }} años{% endif %}
           </div>
         </div>
 
@@ -132,9 +134,16 @@
             <input class="input" name="full_name" type="text" required />
           </div>
 
-          <div class="appt-field" style="margin-top:14px;">
-            <label class="appt-label">Teléfono (opcional)</label>
-            <input class="input" name="phone" type="text" />
+          <div class="appt-grid-2" style="margin-top:14px;">
+            <div class="appt-field">
+              <label class="appt-label">Teléfono (opcional)</label>
+              <input class="input" name="phone" type="text" />
+            </div>
+
+            <div class="appt-field">
+              <label class="appt-label">Fecha de nacimiento (opcional)</label>
+              <input class="input" name="birth_date" type="date" />
+            </div>
           </div>
 
           <div class="appt-actions" style="margin-top:16px;">

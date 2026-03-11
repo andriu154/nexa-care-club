@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from datetime import datetime
 import secrets
 
 from ..database import get_db
@@ -24,22 +25,47 @@ def _clean_cedula(s: str) -> str:
     return "".join(ch for ch in (s or "") if ch.isdigit()).strip()
 
 
+def _parse_birth_date(value):
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        return datetime.strptime(raw, "%Y-%m-%d").date()
+    except Exception:
+        raise HTTPException(status_code=400, detail="birth_date debe tener formato YYYY-MM-DD")
+
+
+def _patient_age(patient: Patient) -> int | None:
+    birth_date = getattr(patient, "birth_date", None)
+    if not birth_date:
+        return None
+
+    today = datetime.utcnow().date()
+    years = today.year - birth_date.year - (
+        (today.month, today.day) < (birth_date.month, birth_date.day)
+    )
+    return years
+
+
+def _serialize_patient(p: Patient) -> dict:
+    return {
+        "id": p.id,
+        "cedula": p.cedula,
+        "full_name": p.full_name,
+        "phone": p.phone,
+        "qr_code": p.qr_code,
+        "birth_date": p.birth_date.isoformat() if p.birth_date else None,
+        "age": _patient_age(p),
+        "total_sessions": p.total_sessions,
+        "completed_sessions": p.completed_sessions,
+        "status": p.status,
+    }
+
+
 @router.get("/")
 def list_patients(db: Session = Depends(get_db)):
     patients = db.query(Patient).order_by(Patient.id.desc()).all()
-    return [
-        {
-            "id": p.id,
-            "cedula": p.cedula,
-            "full_name": p.full_name,
-            "phone": p.phone,
-            "qr_code": p.qr_code,
-            "total_sessions": p.total_sessions,
-            "completed_sessions": p.completed_sessions,
-            "status": p.status,
-        }
-        for p in patients
-    ]
+    return [_serialize_patient(p) for p in patients]
 
 
 @router.get("/{patient_id}")
@@ -47,17 +73,7 @@ def get_patient(patient_id: int, db: Session = Depends(get_db)):
     p = db.query(Patient).filter(Patient.id == patient_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Paciente no encontrado")
-
-    return {
-        "id": p.id,
-        "cedula": p.cedula,
-        "full_name": p.full_name,
-        "phone": p.phone,
-        "qr_code": p.qr_code,
-        "total_sessions": p.total_sessions,
-        "completed_sessions": p.completed_sessions,
-        "status": p.status,
-    }
+    return _serialize_patient(p)
 
 
 @router.get("/cedula/{cedula}")
@@ -70,16 +86,7 @@ def get_patient_by_cedula(cedula: str, db: Session = Depends(get_db)):
     if not p:
         raise HTTPException(status_code=404, detail="Paciente no encontrado")
 
-    return {
-        "id": p.id,
-        "cedula": p.cedula,
-        "full_name": p.full_name,
-        "phone": p.phone,
-        "qr_code": p.qr_code,
-        "total_sessions": p.total_sessions,
-        "completed_sessions": p.completed_sessions,
-        "status": p.status,
-    }
+    return _serialize_patient(p)
 
 
 @router.get("/qr/{qr_code}")
@@ -87,16 +94,7 @@ def get_patient_by_qr(qr_code: str, db: Session = Depends(get_db)):
     p = db.query(Patient).filter(Patient.qr_code == qr_code).first()
     if not p:
         raise HTTPException(status_code=404, detail="Paciente no encontrado")
-    return {
-        "id": p.id,
-        "cedula": p.cedula,
-        "full_name": p.full_name,
-        "phone": p.phone,
-        "qr_code": p.qr_code,
-        "total_sessions": p.total_sessions,
-        "completed_sessions": p.completed_sessions,
-        "status": p.status,
-    }
+    return _serialize_patient(p)
 
 
 @router.post("/")
@@ -112,6 +110,7 @@ def create_patient(payload: dict, db: Session = Depends(get_db)):
             raise HTTPException(status_code=400, detail="cedula ya existe")
 
     phone = (payload.get("phone") or "").strip() or None
+    birth_date = _parse_birth_date(payload.get("birth_date"))
 
     qr_code = (payload.get("qr_code") or "").strip() or _generate_qr_code(db)
 
@@ -135,6 +134,7 @@ def create_patient(payload: dict, db: Session = Depends(get_db)):
         full_name=full_name,
         phone=phone,
         qr_code=qr_code,
+        birth_date=birth_date,
         total_sessions=int(total_sessions),
         completed_sessions=int(completed_sessions),
         status=status,
@@ -144,16 +144,7 @@ def create_patient(payload: dict, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(patient)
 
-    return {
-        "id": patient.id,
-        "cedula": patient.cedula,
-        "full_name": patient.full_name,
-        "phone": patient.phone,
-        "qr_code": patient.qr_code,
-        "total_sessions": patient.total_sessions,
-        "completed_sessions": patient.completed_sessions,
-        "status": patient.status,
-    }
+    return _serialize_patient(patient)
 
 
 @router.patch("/{patient_id}")
@@ -181,6 +172,9 @@ def update_patient(patient_id: int, payload: dict, db: Session = Depends(get_db)
         ph = str(payload["phone"]).strip()
         p.phone = ph or None
 
+    if "birth_date" in payload:
+        p.birth_date = _parse_birth_date(payload.get("birth_date"))
+
     if "qr_code" in payload and payload["qr_code"] is not None:
         new_qr = str(payload["qr_code"]).strip()
         if new_qr:
@@ -203,13 +197,4 @@ def update_patient(patient_id: int, payload: dict, db: Session = Depends(get_db)
     db.commit()
     db.refresh(p)
 
-    return {
-        "id": p.id,
-        "cedula": p.cedula,
-        "full_name": p.full_name,
-        "phone": p.phone,
-        "qr_code": p.qr_code,
-        "total_sessions": p.total_sessions,
-        "completed_sessions": p.completed_sessions,
-        "status": p.status,
-    }
+    return _serialize_patient(p)

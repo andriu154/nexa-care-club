@@ -254,7 +254,17 @@ def _measure_paragraph_height(text: str, max_width: float, font_name="Helvetica"
     return max(18, len(lines) * line_height + 10)
 
 
-def _draw_paragraph(c, x: float, y_top: float, text: str, max_width: float, font_name="Helvetica", font_size=10, color=COLOR_TEXT, line_gap=4):
+def _draw_paragraph(
+    c,
+    x: float,
+    y_top: float,
+    text: str,
+    max_width: float,
+    font_name="Helvetica",
+    font_size=10,
+    color=COLOR_TEXT,
+    line_gap=4,
+):
     lines = _wrap_text(text, max_width, font_name, font_size)
     line_height = font_size + line_gap
 
@@ -670,8 +680,20 @@ def _load_prescription_items(enc: Encounter) -> list[dict]:
 
 
 def _rx_table_row_height(item: dict) -> float:
-    left_h = _measure_paragraph_height(item.get("prescription") or "-", (CONTENT_WIDTH - 32) / 2 - 12, "Helvetica", 10, 3)
-    right_h = _measure_paragraph_height(item.get("indication") or "-", (CONTENT_WIDTH - 32) / 2 - 12, "Helvetica", 10, 3)
+    left_h = _measure_paragraph_height(
+        item.get("prescription") or "-",
+        (CONTENT_WIDTH - 32) / 2 - 12,
+        "Helvetica",
+        10,
+        3,
+    )
+    right_h = _measure_paragraph_height(
+        item.get("indication") or "-",
+        (CONTENT_WIDTH - 32) / 2 - 12,
+        "Helvetica",
+        10,
+        3,
+    )
     return max(34, left_h, right_h) + 8
 
 
@@ -682,11 +704,11 @@ def _draw_prescription_header(c, enc: Encounter, patient: Patient | None, doctor
         f"Atención #{enc.id}",
     )
 
-   chip_w = (CONTENT_WIDTH - 16) / 3
-_draw_info_chip(c, LEFT, y, "Fecha prescripción", _fmt_dt(_best_datetime(enc)), chip_w)
-_draw_info_chip(c, LEFT + chip_w + 8, y, "Paciente", getattr(patient, "full_name", None) or "N/A", chip_w)
-_draw_info_chip(c, LEFT + (chip_w + 8) * 2, y, "Documento", datetime.now().strftime("%Y-%m-%d %H:%M"), chip_w)
-y -= 56
+    chip_w = (CONTENT_WIDTH - 16) / 3
+    _draw_info_chip(c, LEFT, y, "Fecha prescripción", _fmt_dt(_best_datetime(enc)), chip_w)
+    _draw_info_chip(c, LEFT + chip_w + 8, y, "Paciente", getattr(patient, "full_name", None) or "N/A", chip_w)
+    _draw_info_chip(c, LEFT + (chip_w + 8) * 2, y, "Documento", datetime.now().strftime("%Y-%m-%d %H:%M"), chip_w)
+    y -= 56
 
     doc_name, doc_spec, doc_reg = _doctor_meta(doctor)
     meta_rows = [
@@ -765,6 +787,55 @@ def _draw_prescription_table(c, y_top: float, items: list[dict]):
     return y
 
 
+def _build_gyne_text(note: ClinicalNote | None) -> str:
+    if not note:
+        return "-"
+
+    parts = []
+
+    lmp = _safe(getattr(note, "last_menstrual_period", None), "")
+    if lmp:
+        parts.append(f"Fecha de última menstruación: {lmp}")
+
+    g = getattr(note, "gestas", None)
+    pv = getattr(note, "vaginal_deliveries", None)
+    cs = getattr(note, "c_sections", None)
+    ab = getattr(note, "abortions", None)
+    hv = getattr(note, "living_children", None)
+
+    if any(v is not None for v in [g, pv, cs, ab, hv]):
+        parts.append(
+            "Gestas: {0} | Partos vaginales: {1} | Cesáreas: {2} | Abortos: {3} | Hijos vivos: {4}".format(
+                _safe(g),
+                _safe(pv),
+                _safe(cs),
+                _safe(ab),
+                _safe(hv),
+            )
+        )
+
+    return "\n".join(parts) if parts else "-"
+
+
+def _encounter_blocks(note: ClinicalNote | None):
+    return [
+        ("Motivo de consulta", note.chief_complaint if note else "-"),
+        ("Enfermedad actual", note.hpi if note else "-"),
+        ("__VITALS__", ""),
+        ("Antecedentes personales", getattr(note, "personal_history", None) if note else "-"),
+        ("Antecedentes familiares", getattr(note, "family_history", None) if note else "-"),
+        ("Antecedentes quirúrgicos", getattr(note, "surgical_history", None) if note else "-"),
+        ("Alergias", getattr(note, "allergies", None) if note else "-"),
+        ("Antecedentes gineco-obstétricos", _build_gyne_text(note)),
+        ("Examen físico", note.physical_exam if note else "-"),
+        ("Impresión diagnóstica", note.assessment_dx if note else "-"),
+        ("Exámenes complementarios", note.complementary_tests if note else "-"),
+        ("Tratamiento no farmacológico", note.plan_treatment if note else "-"),
+        ("Indicaciones y signos de alarma", note.indications_alarm_signs if note else "-"),
+        ("Seguimiento", note.follow_up if note else "-"),
+    ]
+
+
 @router.get("/encounters/{encounter_id}/pdf")
 def download_encounter_pdf(
     encounter_id: int,
@@ -817,17 +888,7 @@ def download_encounter_pdf(
     ]
     y = _draw_meta_grid(c, y, meta_rows, cols=2)
 
-    blocks = [
-        ("Motivo de consulta", note.chief_complaint if note else "-"),
-        ("Enfermedad actual", note.hpi if note else "-"),
-        ("__VITALS__", ""),
-        ("Examen físico", note.physical_exam if note else "-"),
-        ("Exámenes complementarios", note.complementary_tests if note else "-"),
-        ("Impresión diagnóstica", note.assessment_dx if note else "-"),
-        ("Prescripción / Plan", note.plan_treatment if note else "-"),
-        ("Indicaciones y signos de alarma", note.indications_alarm_signs if note else "-"),
-        ("Seguimiento", note.follow_up if note else "-"),
-    ]
+    blocks = _encounter_blocks(note)
 
     for title, text in blocks:
         if title == "__VITALS__":
@@ -996,17 +1057,7 @@ def download_patient_history_pdf(
         ]
         y = _draw_meta_grid(c, y, meta_rows, cols=2)
 
-        blocks = [
-            ("Motivo de consulta", note.chief_complaint if note else "-"),
-            ("Enfermedad actual", note.hpi if note else "-"),
-            ("__VITALS__", ""),
-            ("Examen físico", note.physical_exam if note else "-"),
-            ("Exámenes complementarios", note.complementary_tests if note else "-"),
-            ("Impresión diagnóstica", note.assessment_dx if note else "-"),
-            ("Prescripción / Plan", note.plan_treatment if note else "-"),
-            ("Indicaciones y signos de alarma", note.indications_alarm_signs if note else "-"),
-            ("Seguimiento", note.follow_up if note else "-"),
-        ]
+        blocks = _encounter_blocks(note)
 
         for title, text in blocks:
             if title == "__VITALS__":

@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import secrets
 import os
 from zoneinfo import ZoneInfo
@@ -59,6 +59,15 @@ def _generate_qr_code(db: Session) -> str:
             return code
 
 
+def _calculate_age(birth_date: date | None):
+    if not birth_date:
+        return None
+    today = date.today()
+    return today.year - birth_date.year - (
+        (today.month, today.day) < (birth_date.month, birth_date.day)
+    )
+
+
 def _overlaps(
     db: Session,
     doctor_id: int,
@@ -108,6 +117,9 @@ def new_appointment_form(
     ced = _clean_cedula(cedula or "")
     patient = _find_patient_by_cedula(db, ced) if ced else None
 
+    if patient:
+        patient.age_years = _calculate_age(getattr(patient, "birth_date", None))
+
     ctx = {
         "request": request,
         "current_doctor": current_doctor,
@@ -135,6 +147,7 @@ def quick_create_patient(
     cedula: str = Form(...),
     full_name: str = Form(...),
     phone: str = Form(""),
+    birth_date: str = Form(""),
     modal: str = Form("0"),
 ):
     current_doctor = _require_login(request, db)
@@ -159,12 +172,20 @@ def quick_create_patient(
             status_code=HTTP_303_SEE_OTHER,
         )
 
+    birth = None
+    if birth_date:
+        try:
+            birth = datetime.strptime(birth_date, "%Y-%m-%d").date()
+        except Exception:
+            raise HTTPException(status_code=400, detail="Fecha de nacimiento inválida")
+
     now_local_naive = _now_local().replace(tzinfo=None)
 
     p = Patient(
         cedula=ced,
         full_name=name,
         phone=(phone or "").strip() or None,
+        birth_date=birth,
         qr_code=_generate_qr_code(db),
         total_sessions=0,
         completed_sessions=0,
@@ -387,6 +408,7 @@ def start_encounter_from_appointment(
         created_at=now_local_naive,
         ended_at=None,
         is_signed=False,
+        prescription_json="[]",
     )
     db.add(enc)
     db.commit()
