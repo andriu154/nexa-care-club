@@ -101,14 +101,14 @@ def _normalize_service_text(value: str) -> str:
         "esteticas": "estetic",
         "botulinica": "botulinic",
         "botulinico": "botulinic",
+        "consulta": "consulta",
         "control": "control",
         "general": "general",
+        "rinomodelacion": "rinomodelacion",
+        "rinomodelacione": "rinomodelacion",
     }
 
-    normalized_tokens = []
-    for tok in tokens:
-        normalized_tokens.append(token_map.get(tok, tok))
-
+    normalized_tokens = [token_map.get(tok, tok) for tok in tokens]
     return " ".join(normalized_tokens).strip()
 
 
@@ -364,7 +364,7 @@ def update_service(
     name: str = Form(...),
     category: str = Form("Consulta"),
     base_price: str = Form(...),
-    is_active: str = Form("1"),
+    is_active: str | None = Form(None),
 ):
     current_doctor = get_logged_doctor(request, db)
     if not current_doctor:
@@ -379,7 +379,7 @@ def update_service(
     name = (name or "").strip()
     category = (category or "Consulta").strip()
     price = _parse_money(base_price)
-    active = str(is_active or "0").strip() in {"1", "true", "on", "yes"}
+    active = bool(is_active)
 
     if not name:
         return _render_finances(request, current_doctor, db, error="El nombre del servicio es obligatorio.")
@@ -403,7 +403,40 @@ def update_service(
     service.updated_at = datetime.utcnow()
     db.commit()
 
-    return _render_finances(request, current_doctor, db, success=f"Servicio actualizado: {name}")
+    estado = "activo" if active else "inactivo"
+    return _render_finances(request, current_doctor, db, success=f"Servicio actualizado: {name} ({estado}).")
+
+
+@router.post("/services/{service_id}/delete")
+def delete_service(
+    service_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    current_doctor = get_logged_doctor(request, db)
+    if not current_doctor:
+        return _redirect_login()
+    if not is_admin(current_doctor):
+        return _redirect_app()
+
+    service = db.query(ServiceCatalog).filter(ServiceCatalog.id == service_id).first()
+    if not service:
+        return _render_finances(request, current_doctor, db, error="Servicio no encontrado.")
+
+    linked_charges = db.query(Charge).filter(Charge.service_id == service_id).count()
+    if linked_charges > 0:
+        return _render_finances(
+            request,
+            current_doctor,
+            db,
+            error="No se puede eliminar ese servicio porque ya tiene cobros asociados. Puedes dejarlo inactivo.",
+        )
+
+    name = service.name
+    db.delete(service)
+    db.commit()
+
+    return _render_finances(request, current_doctor, db, success=f"Servicio eliminado: {name}")
 
 
 @router.post("/charges/create")
