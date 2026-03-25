@@ -117,7 +117,10 @@ def ensure_sqlite_schema():
                 conn.execute(text("UPDATE doctors SET must_change_password = 0 WHERE must_change_password IS NULL;"))
                 conn.execute(text("UPDATE doctors SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL;"))
 
-                conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_doctors_username_unique ON doctors(username) WHERE username IS NOT NULL;"))
+                conn.execute(text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ix_doctors_username_unique "
+                    "ON doctors(username) WHERE username IS NOT NULL;"
+                ))
 
             tblp = conn.execute(
                 text("SELECT name FROM sqlite_master WHERE type='table' AND name='patients';")
@@ -192,7 +195,10 @@ def ensure_postgres_schema():
             conn.execute(text("UPDATE doctors SET is_active = TRUE WHERE is_active IS NULL;"))
             conn.execute(text("UPDATE doctors SET must_change_password = FALSE WHERE must_change_password IS NULL;"))
             conn.execute(text("UPDATE doctors SET created_at = NOW() WHERE created_at IS NULL;"))
-            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_doctors_username_unique ON doctors(username) WHERE username IS NOT NULL;"))
+            conn.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ix_doctors_username_unique "
+                "ON doctors(username) WHERE username IS NOT NULL;"
+            ))
 
             patient_columns = {
                 "cedula": "ALTER TABLE patients ADD COLUMN cedula VARCHAR;",
@@ -349,7 +355,12 @@ async def enforce_password_change(request: Request, call_next):
     if path.startswith(exempt_prefixes):
         return await call_next(request)
 
-    doctor_id = request.session.get("doctor_id") if hasattr(request, "session") else None
+    if "session" not in request.scope:
+        return await call_next(request)
+
+    session = request.scope.get("session") or {}
+    doctor_id = session.get("doctor_id")
+
     if doctor_id:
         db = SessionLocal()
         try:
