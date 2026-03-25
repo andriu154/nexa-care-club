@@ -228,6 +228,18 @@
     color:#087443 !important;
   }
 
+  .fin-service-edit{
+    display:grid;
+    gap:8px;
+  }
+
+  .fin-service-actions{
+    display:flex;
+    gap:8px;
+    align-items:center;
+    flex-wrap:wrap;
+  }
+
   @media (max-width: 1280px){
     .fin-summary{
       grid-template-columns:repeat(2, minmax(0, 1fr));
@@ -395,7 +407,7 @@
     <section class="fin-card">
       <div class="fin-head">
         <div class="fin-title">Catálogo de servicios</div>
-        <div class="fin-sub">Define servicios base y sus precios de referencia.</div>
+        <div class="fin-sub">Crea, edita y activa o desactiva servicios con sus precios.</div>
       </div>
 
       <div class="fin-body">
@@ -430,25 +442,51 @@
                 <th>Categoría</th>
                 <th>Precio base</th>
                 <th>Estado</th>
+                <th>Guardar cambios</th>
               </tr>
             </thead>
             <tbody>
               {% for s in services %}
                 <tr>
-                  <td>{{ s.name }}</td>
-                  <td>{{ s.category if s.category else "—" }}</td>
-                  <td>${{ '%.2f'|format(s.base_price|float) }}</td>
-                  <td>
-                    {% if s.is_active %}
-                      <span class="fin-pill pill-green">Activo</span>
-                    {% else %}
-                      <span class="fin-pill">Inactivo</span>
-                    {% endif %}
+                  <td colspan="5">
+                    <form method="post" action="/app/finances/services/{{ s.id }}/update" class="fin-service-edit">
+                      <div class="fin-grid-3">
+                        <div>
+                          <label class="label">Servicio</label>
+                          <input class="input" type="text" name="name" value="{{ s.name }}" required>
+                        </div>
+
+                        <div>
+                          <label class="label">Categoría</label>
+                          <input class="input" type="text" name="category" value="{{ s.category if s.category else '' }}" required>
+                        </div>
+
+                        <div>
+                          <label class="label">Precio base</label>
+                          <input class="input" type="number" step="0.01" min="0" name="base_price" value="{{ '%.2f'|format(s.base_price|float) }}" required>
+                        </div>
+                      </div>
+
+                      <div class="fin-service-actions">
+                        <label style="display:inline-flex; align-items:center; gap:8px; font-weight:700; color:#334155;">
+                          <input type="checkbox" name="is_active" value="1" {% if s.is_active %}checked{% endif %}>
+                          Activo
+                        </label>
+
+                        <button class="btn btn-outline btn-sm" type="submit">Actualizar servicio</button>
+
+                        {% if s.is_active %}
+                          <span class="fin-pill pill-green">Activo</span>
+                        {% else %}
+                          <span class="fin-pill">Inactivo</span>
+                        {% endif %}
+                      </div>
+                    </form>
                   </td>
                 </tr>
               {% else %}
                 <tr>
-                  <td colspan="4">No hay servicios registrados.</td>
+                  <td colspan="5">No hay servicios registrados.</td>
                 </tr>
               {% endfor %}
             </tbody>
@@ -491,7 +529,7 @@
                     {% endif %}
                   </td>
                   <td>
-                    {{ c.service.name if c.service else (c.description if c.description else "—") }}
+                    {{ c.display_service_label }}
                     {% if c.notes %}
                       <div class="muted">{{ c.notes }}</div>
                     {% endif %}
@@ -533,7 +571,7 @@
     <section class="fin-card">
       <div class="fin-head">
         <div class="fin-title">Rankings del mes</div>
-        <div class="fin-sub">Solo consideran cobros pagados.</div>
+        <div class="fin-sub">Solo consideran cobros pagados y agrupan servicios equivalentes aunque cambie la ortografía.</div>
       </div>
 
       <div class="fin-body">

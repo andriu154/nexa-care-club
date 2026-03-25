@@ -1,6 +1,9 @@
 # app/routes/finances_ui.py
 from datetime import datetime
 import os
+import re
+import unicodedata
+from difflib import SequenceMatcher
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Request, Form
@@ -77,6 +80,83 @@ def _parse_money(value) -> float:
         return 0.0
 
 
+def _strip_accents(value: str) -> str:
+    value = unicodedata.normalize("NFD", value or "")
+    return "".join(ch for ch in value if unicodedata.category(ch) != "Mn")
+
+
+def _normalize_service_text(value: str) -> str:
+    text = _strip_accents((value or "").strip().lower())
+    text = re.sub(r"[^a-z0-9\s]", " ", text)
+    tokens = [tok for tok in text.split() if tok]
+
+    token_map = {
+        "medico": "medic",
+        "medica": "medic",
+        "medicos": "medic",
+        "medicas": "medic",
+        "estetico": "estetic",
+        "estetica": "estetic",
+        "esteticos": "estetic",
+        "esteticas": "estetic",
+        "botulinica": "botulinic",
+        "botulinico": "botulinic",
+        "control": "control",
+        "general": "general",
+    }
+
+    normalized_tokens = []
+    for tok in tokens:
+        normalized_tokens.append(token_map.get(tok, tok))
+
+    return " ".join(normalized_tokens).strip()
+
+
+def _canonical_service_label(raw_label: str, catalog_services: list[ServiceCatalog]) -> str:
+    source = (raw_label or "").strip()
+    if not source:
+        return "Sin servicio"
+
+    normalized_source = _normalize_service_text(source)
+    if not normalized_source:
+        return source
+
+    best_label = source
+    best_ratio = 0.0
+
+    for item in catalog_services:
+        catalog_name = (item.name or "").strip()
+        if not catalog_name:
+            continue
+
+        normalized_catalog = _normalize_service_text(catalog_name)
+        if not normalized_catalog:
+            continue
+
+        if normalized_catalog == normalized_source:
+            return catalog_name
+
+        ratio = SequenceMatcher(None, normalized_source, normalized_catalog).ratio()
+        if ratio > best_ratio:
+            best_ratio = ratio
+            best_label = catalog_name
+
+    if best_ratio >= 0.86:
+        return best_label
+
+    return source
+
+
+def _charge_service_label(charge: Charge, catalog_services: list[ServiceCatalog]) -> str:
+    if charge.service and charge.service.name:
+        return charge.service.name.strip()
+
+    if charge.description:
+        return _canonical_service_label(charge.description, catalog_services)
+
+    return "Sin servicio"
+
+
 def _render_finances(
     request: Request,
     current_doctor: Doctor,
@@ -96,6 +176,10 @@ def _render_finances(
     preselected_encounter_id = _parse_int(request.query_params.get("encounter_id"))
 
     month_start, month_end, selected_month = _month_bounds(month)
+
+    services = db.query(ServiceCatalog).order_by(ServiceCatalog.is_active.desc(), ServiceCatalog.name.asc()).all()
+    doctors = db.query(Doctor).filter(Doctor.is_active == True).order_by(Doctor.name.asc()).all()
+    patients = db.query(Patient).order_by(Patient.full_name.asc()).all()
 
     charges_query = (
         db.query(Charge)
@@ -122,6 +206,9 @@ def _render_finances(
 
     month_charges = charges_query.order_by(Charge.charge_date.desc(), Charge.id.desc()).all()
 
+    for c in month_charges:
+        c.display_service_label = _charge_service_label(c, services)
+
     today_local = datetime.now(APP_TZ).date()
 
     paid_total = sum(_to_float(c.total) for c in month_charges if c.payment_status == "pagado")
@@ -142,11 +229,11 @@ def _render_finances(
         if c.payment_status != "pagado":
             continue
 
-        doctor_name = c.doctor.name if c.doctor else "Sin profesional"
+        doctor_name = c.doctor.name.strip() if c.doctor and c.doctor.name else "Sin profesional"
         doctor_ranking.setdefault(doctor_name, 0.0)
         doctor_ranking[doctor_name] += _to_float(c.total)
 
-        service_name = c.service.name if c.service else (c.description or "Sin servicio")
+        service_name = c.display_service_label or "Sin servicio"
         service_ranking.setdefault(service_name, 0.0)
         service_ranking[service_name] += _to_float(c.total)
 
@@ -154,10 +241,6 @@ def _render_finances(
     ranking_services = sorted(service_ranking.items(), key=lambda x: x[1], reverse=True)
 
     recent_charges = month_charges[:30]
-
-    patients = db.query(Patient).order_by(Patient.full_name.asc()).all()
-    doctors = db.query(Doctor).filter(Doctor.is_active == True).order_by(Doctor.name.asc()).all()
-    services = db.query(ServiceCatalog).order_by(ServiceCatalog.is_active.desc(), ServiceCatalog.name.asc()).all()
 
     selected_patient = None
     selected_encounter = None
@@ -271,6 +354,56 @@ def create_service(
     db.commit()
 
     return _render_finances(request, current_doctor, db, success=f"Servicio creado: {name}")
+
+
+@router.post("/services/{service_id}/update")
+def update_service(
+    service_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    name: str = Form(...),
+    category: str = Form("Consulta"),
+    base_price: str = Form(...),
+    is_active: str = Form("1"),
+):
+    current_doctor = get_logged_doctor(request, db)
+    if not current_doctor:
+        return _redirect_login()
+    if not is_admin(current_doctor):
+        return _redirect_app()
+
+    service = db.query(ServiceCatalog).filter(ServiceCatalog.id == service_id).first()
+    if not service:
+        return _render_finances(request, current_doctor, db, error="Servicio no encontrado.")
+
+    name = (name or "").strip()
+    category = (category or "Consulta").strip()
+    price = _parse_money(base_price)
+    active = str(is_active or "0").strip() in {"1", "true", "on", "yes"}
+
+    if not name:
+        return _render_finances(request, current_doctor, db, error="El nombre del servicio es obligatorio.")
+
+    if price < 0:
+        return _render_finances(request, current_doctor, db, error="El precio no puede ser negativo.")
+
+    duplicate = (
+        db.query(ServiceCatalog)
+        .filter(ServiceCatalog.id != service_id)
+        .filter(ServiceCatalog.name == name)
+        .first()
+    )
+    if duplicate:
+        return _render_finances(request, current_doctor, db, error="Ya existe otro servicio con ese nombre.")
+
+    service.name = name
+    service.category = category
+    service.base_price = price
+    service.is_active = active
+    service.updated_at = datetime.utcnow()
+    db.commit()
+
+    return _render_finances(request, current_doctor, db, success=f"Servicio actualizado: {name}")
 
 
 @router.post("/charges/create")
