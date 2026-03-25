@@ -1,0 +1,285 @@
+<!-- app/templates/professionals.html -->
+{% extends "base.html" %}
+
+{% block title %}Profesionales{% endblock %}
+
+{% block content %}
+<style>
+  .prof-shell{
+    display:grid;
+    grid-template-columns:minmax(360px, .95fr) minmax(0, 1.7fr);
+    gap:18px;
+  }
+
+  .prof-card{
+    background:#fff;
+    border:1px solid #dbe6f3;
+    border-radius:22px;
+    box-shadow:0 10px 28px rgba(24,39,75,.10);
+    overflow:hidden;
+  }
+
+  .prof-head{
+    padding:18px 20px;
+    border-bottom:1px solid #e2ebf5;
+    background:linear-gradient(180deg,#f8fbff 0%, #eff6ff 100%);
+  }
+
+  .prof-title{
+    font-size:18px;
+    font-weight:800;
+    color:#163c7a;
+  }
+
+  .prof-sub{
+    font-size:13px;
+    color:#6b7280;
+    margin-top:4px;
+  }
+
+  .prof-body{
+    padding:18px;
+  }
+
+  .prof-form{
+    display:grid;
+    gap:12px;
+  }
+
+  .prof-grid-2{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:12px;
+  }
+
+  .prof-grid-3{
+    display:grid;
+    grid-template-columns:1.2fr 1fr .8fr;
+    gap:12px;
+  }
+
+  .prof-table{
+    display:grid;
+    gap:12px;
+  }
+
+  .prof-row{
+    border:1px solid #dbe6f3;
+    background:#fff;
+    border-radius:18px;
+    padding:16px;
+    display:grid;
+    gap:12px;
+    box-shadow:0 8px 18px rgba(24,39,75,.06);
+  }
+
+  .prof-top{
+    display:flex;
+    justify-content:space-between;
+    gap:12px;
+    align-items:flex-start;
+    flex-wrap:wrap;
+  }
+
+  .prof-name{
+    font-size:16px;
+    font-weight:800;
+    color:#163c7a;
+  }
+
+  .prof-meta{
+    margin-top:4px;
+    color:#64748b;
+    font-size:12px;
+    font-weight:700;
+    line-height:1.5;
+  }
+
+  .prof-badges{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+  }
+
+  .badge{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    padding:7px 10px;
+    border-radius:999px;
+    font-size:11px;
+    font-weight:800;
+    border:1px solid #dbe6f3;
+    background:#f8fbff;
+    color:#334155;
+  }
+
+  .badge-green{
+    border-color:#bdeccf;
+    background:#ecfff5;
+    color:#087443;
+  }
+
+  .badge-red{
+    border-color:#f4c6c8;
+    background:#fff0f1;
+    color:#b42318;
+  }
+
+  .badge-purple{
+    border-color:#ddd6fe;
+    background:#f5f3ff;
+    color:#6d28d9;
+  }
+
+  .prof-actions{
+    display:grid;
+    grid-template-columns:1fr auto;
+    gap:10px;
+    align-items:end;
+  }
+
+  .prof-inline-form{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    align-items:end;
+  }
+
+  @media (max-width: 1100px){
+    .prof-shell{
+      grid-template-columns:1fr;
+    }
+  }
+
+  @media (max-width: 700px){
+    .prof-grid-2,
+    .prof-grid-3,
+    .prof-actions{
+      grid-template-columns:1fr;
+    }
+  }
+</style>
+
+<div class="prof-shell">
+  <section class="prof-card">
+    <div class="prof-head">
+      <div class="prof-title">Nuevo profesional</div>
+      <div class="prof-sub">Crea el usuario, define el cargo y asigna una contraseña temporal obligatoria.</div>
+    </div>
+
+    <div class="prof-body">
+      {% if error %}
+        <div class="alert" style="margin-bottom:12px;">{{ error }}</div>
+      {% endif %}
+
+      {% if success %}
+        <div class="alert" style="margin-bottom:12px; border-color:#bdeccf; background:#ecfff5; color:#087443;">{{ success }}</div>
+      {% endif %}
+
+      <form method="post" action="/app/professionals/create" class="prof-form">
+        <div>
+          <label class="label">Nombre completo</label>
+          <input class="input" type="text" name="name" value="{{ form_data.get('name', '') }}" required>
+        </div>
+
+        <div class="prof-grid-2">
+          <div>
+            <label class="label">Cargo / especialidad</label>
+            <input class="input" type="text" name="specialty" value="{{ form_data.get('specialty', '') }}" placeholder="Ej: Médico General">
+          </div>
+
+          <div>
+            <label class="label">Rol</label>
+            <select class="input" name="role">
+              <option value="doctor" {% if form_data.get('role', 'doctor') == 'doctor' %}selected{% endif %}>Doctor</option>
+              <option value="admin" {% if form_data.get('role') == 'admin' %}selected{% endif %}>Administrador</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="prof-grid-2">
+          <div>
+            <label class="label">Registro profesional</label>
+            <input class="input" type="text" name="registration" value="{{ form_data.get('registration', '') }}" required>
+          </div>
+
+          <div>
+            <label class="label">Usuario</label>
+            <input class="input" type="text" name="username" value="{{ form_data.get('username', '') }}" placeholder="Ej: drandres" required>
+          </div>
+        </div>
+
+        <div>
+          <label class="label">Contraseña temporal</label>
+          <input class="input" type="text" name="temporary_password" minlength="8" placeholder="Mínimo 8 caracteres" required>
+        </div>
+
+        <button class="btn btn-primary" type="submit">Crear profesional</button>
+      </form>
+    </div>
+  </section>
+
+  <section class="prof-card">
+    <div class="prof-head">
+      <div class="prof-title">Profesionales registrados</div>
+      <div class="prof-sub">Activa, desactiva o restablece la contraseña temporal de cada usuario.</div>
+    </div>
+
+    <div class="prof-body">
+      <div class="prof-table">
+        {% for p in professionals %}
+          <article class="prof-row">
+            <div class="prof-top">
+              <div>
+                <div class="prof-name">{{ p.name }}</div>
+                <div class="prof-meta">
+                  {{ p.specialty if p.specialty else "Sin cargo especificado" }}<br>
+                  Registro: {{ p.registration }}<br>
+                  Usuario: {{ p.username if p.username else "—" }}
+                </div>
+              </div>
+
+              <div class="prof-badges">
+                {% if p.role == 'admin' %}
+                  <span class="badge badge-purple">Administrador</span>
+                {% else %}
+                  <span class="badge">Doctor</span>
+                {% endif %}
+
+                {% if p.is_active %}
+                  <span class="badge badge-green">Activo</span>
+                {% else %}
+                  <span class="badge badge-red">Inactivo</span>
+                {% endif %}
+
+                {% if p.must_change_password %}
+                  <span class="badge">Debe cambiar clave</span>
+                {% endif %}
+              </div>
+            </div>
+
+            <div class="prof-actions">
+              <form method="post" action="/app/professionals/{{ p.id }}/reset-password" class="prof-inline-form">
+                <div style="min-width:220px;">
+                  <label class="label">Nueva contraseña temporal</label>
+                  <input class="input" type="text" name="temporary_password" minlength="8" placeholder="Restablecer clave" required>
+                </div>
+                <button class="btn btn-outline" type="submit">Resetear contraseña</button>
+              </form>
+
+              <form method="post" action="/app/professionals/{{ p.id }}/toggle-active">
+                {% if p.is_active %}
+                  <button class="btn btn-danger" type="submit">Desactivar</button>
+                {% else %}
+                  <button class="btn btn-success" type="submit">Activar</button>
+                {% endif %}
+              </form>
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}

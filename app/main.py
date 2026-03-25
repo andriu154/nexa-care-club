@@ -1,4 +1,6 @@
-from fastapi import FastAPI
+# app/main.py
+from fastapi import FastAPI, Request
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 import os
@@ -9,7 +11,6 @@ from passlib.context import CryptContext
 from .database import engine, SessionLocal
 from .models import Base, Doctor
 
-# Routers API
 from .routes.doctors import router as doctors_router
 from .routes.auth import router as auth_router
 from .routes.patients import router as patients_router
@@ -20,11 +21,9 @@ from .routes.encounters import router as encounters_router
 from .routes.clinical_notes import router as clinical_notes_router
 from .routes.pdf import router as pdf_router
 from .routes.history import router as history_router
-
-# Routers UI
 from .routes.ui import router as ui_router
 from .routes.appointments_ui import router as appointments_ui_router
-
+from .routes.professionals_ui import router as professionals_ui_router
 
 app = FastAPI(title="NexaCenter")
 
@@ -62,7 +61,6 @@ def ensure_sqlite_schema():
 
     try:
         with engine.begin() as conn:
-            # doctors
             tbl = conn.execute(
                 text("SELECT name FROM sqlite_master WHERE type='table' AND name='doctors';")
             ).fetchone()
@@ -86,7 +84,41 @@ def ensure_sqlite_schema():
                     conn.execute(text("ALTER TABLE doctors ADD COLUMN pin VARCHAR NOT NULL DEFAULT '0000';"))
                     print("✅ Migración SQLite: doctors.pin agregado")
 
-            # patients
+                if "username" not in col_names:
+                    conn.execute(text("ALTER TABLE doctors ADD COLUMN username VARCHAR;"))
+                    print("✅ Migración SQLite: doctors.username agregado")
+
+                if "role" not in col_names:
+                    conn.execute(text("ALTER TABLE doctors ADD COLUMN role VARCHAR NOT NULL DEFAULT 'doctor';"))
+                    print("✅ Migración SQLite: doctors.role agregado")
+
+                if "is_active" not in col_names:
+                    conn.execute(text("ALTER TABLE doctors ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT 1;"))
+                    print("✅ Migración SQLite: doctors.is_active agregado")
+
+                if "must_change_password" not in col_names:
+                    conn.execute(text("ALTER TABLE doctors ADD COLUMN must_change_password BOOLEAN NOT NULL DEFAULT 0;"))
+                    print("✅ Migración SQLite: doctors.must_change_password agregado")
+
+                if "created_at" not in col_names:
+                    conn.execute(text("ALTER TABLE doctors ADD COLUMN created_at DATETIME;"))
+                    print("✅ Migración SQLite: doctors.created_at agregado")
+
+                if "updated_at" not in col_names:
+                    conn.execute(text("ALTER TABLE doctors ADD COLUMN updated_at DATETIME;"))
+                    print("✅ Migración SQLite: doctors.updated_at agregado")
+
+                if "last_login_at" not in col_names:
+                    conn.execute(text("ALTER TABLE doctors ADD COLUMN last_login_at DATETIME;"))
+                    print("✅ Migración SQLite: doctors.last_login_at agregado")
+
+                conn.execute(text("UPDATE doctors SET role = 'doctor' WHERE role IS NULL OR TRIM(role) = '';"))
+                conn.execute(text("UPDATE doctors SET is_active = 1 WHERE is_active IS NULL;"))
+                conn.execute(text("UPDATE doctors SET must_change_password = 0 WHERE must_change_password IS NULL;"))
+                conn.execute(text("UPDATE doctors SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL;"))
+
+                conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_doctors_username_unique ON doctors(username) WHERE username IS NOT NULL;"))
+
             tblp = conn.execute(
                 text("SELECT name FROM sqlite_master WHERE type='table' AND name='patients';")
             ).fetchone()
@@ -110,7 +142,6 @@ def ensure_sqlite_schema():
                     conn.execute(text("ALTER TABLE patients ADD COLUMN updated_at DATETIME;"))
                     print("✅ Migración SQLite: patients.updated_at agregado")
 
-            # encounters
             tble = conn.execute(
                 text("SELECT name FROM sqlite_master WHERE type='table' AND name='encounters';")
             ).fetchone()
@@ -132,95 +163,55 @@ def ensure_postgres_schema():
 
     try:
         with engine.begin() as conn:
-            # doctors.specialty
-            exists = conn.execute(text("""
-                SELECT 1
-                FROM information_schema.columns
-                WHERE table_name = 'doctors' AND column_name = 'specialty'
-                LIMIT 1
-            """)).fetchone()
-            if not exists:
-                conn.execute(text("ALTER TABLE doctors ADD COLUMN specialty VARCHAR;"))
-                print("✅ Migración PostgreSQL: doctors.specialty agregado")
+            doctor_columns = {
+                "specialty": "ALTER TABLE doctors ADD COLUMN specialty VARCHAR;",
+                "registration": "ALTER TABLE doctors ADD COLUMN registration VARCHAR;",
+                "password_hash": "ALTER TABLE doctors ADD COLUMN password_hash VARCHAR;",
+                "pin": "ALTER TABLE doctors ADD COLUMN pin VARCHAR NOT NULL DEFAULT '0000';",
+                "username": "ALTER TABLE doctors ADD COLUMN username VARCHAR;",
+                "role": "ALTER TABLE doctors ADD COLUMN role VARCHAR NOT NULL DEFAULT 'doctor';",
+                "is_active": "ALTER TABLE doctors ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE;",
+                "must_change_password": "ALTER TABLE doctors ADD COLUMN must_change_password BOOLEAN NOT NULL DEFAULT FALSE;",
+                "created_at": "ALTER TABLE doctors ADD COLUMN created_at TIMESTAMP;",
+                "updated_at": "ALTER TABLE doctors ADD COLUMN updated_at TIMESTAMP;",
+                "last_login_at": "ALTER TABLE doctors ADD COLUMN last_login_at TIMESTAMP;",
+            }
 
-            # doctors.registration
-            exists = conn.execute(text("""
-                SELECT 1
-                FROM information_schema.columns
-                WHERE table_name = 'doctors' AND column_name = 'registration'
-                LIMIT 1
-            """)).fetchone()
-            if not exists:
-                conn.execute(text("ALTER TABLE doctors ADD COLUMN registration VARCHAR;"))
-                print("✅ Migración PostgreSQL: doctors.registration agregado")
+            for col_name, sql in doctor_columns.items():
+                exists = conn.execute(text(f"""
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'doctors' AND column_name = '{col_name}'
+                    LIMIT 1
+                """)).fetchone()
+                if not exists:
+                    conn.execute(text(sql))
+                    print(f"✅ Migración PostgreSQL: doctors.{col_name} agregado")
 
-            # doctors.password_hash
-            exists = conn.execute(text("""
-                SELECT 1
-                FROM information_schema.columns
-                WHERE table_name = 'doctors' AND column_name = 'password_hash'
-                LIMIT 1
-            """)).fetchone()
-            if not exists:
-                conn.execute(text("ALTER TABLE doctors ADD COLUMN password_hash VARCHAR;"))
-                print("✅ Migración PostgreSQL: doctors.password_hash agregado")
+            conn.execute(text("UPDATE doctors SET role = 'doctor' WHERE role IS NULL OR BTRIM(role) = '';"))
+            conn.execute(text("UPDATE doctors SET is_active = TRUE WHERE is_active IS NULL;"))
+            conn.execute(text("UPDATE doctors SET must_change_password = FALSE WHERE must_change_password IS NULL;"))
+            conn.execute(text("UPDATE doctors SET created_at = NOW() WHERE created_at IS NULL;"))
+            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_doctors_username_unique ON doctors(username) WHERE username IS NOT NULL;"))
 
-            # doctors.pin
-            exists = conn.execute(text("""
-                SELECT 1
-                FROM information_schema.columns
-                WHERE table_name = 'doctors' AND column_name = 'pin'
-                LIMIT 1
-            """)).fetchone()
-            if not exists:
-                conn.execute(text("ALTER TABLE doctors ADD COLUMN pin VARCHAR NOT NULL DEFAULT '0000';"))
-                print("✅ Migración PostgreSQL: doctors.pin agregado")
+            patient_columns = {
+                "cedula": "ALTER TABLE patients ADD COLUMN cedula VARCHAR;",
+                "phone": "ALTER TABLE patients ADD COLUMN phone VARCHAR;",
+                "created_at": "ALTER TABLE patients ADD COLUMN created_at TIMESTAMP;",
+                "updated_at": "ALTER TABLE patients ADD COLUMN updated_at TIMESTAMP;",
+            }
 
-            # patients.cedula
-            exists = conn.execute(text("""
-                SELECT 1
-                FROM information_schema.columns
-                WHERE table_name = 'patients' AND column_name = 'cedula'
-                LIMIT 1
-            """)).fetchone()
-            if not exists:
-                conn.execute(text("ALTER TABLE patients ADD COLUMN cedula VARCHAR;"))
-                print("✅ Migración PostgreSQL: patients.cedula agregado")
+            for col_name, sql in patient_columns.items():
+                exists = conn.execute(text(f"""
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'patients' AND column_name = '{col_name}'
+                    LIMIT 1
+                """)).fetchone()
+                if not exists:
+                    conn.execute(text(sql))
+                    print(f"✅ Migración PostgreSQL: patients.{col_name} agregado")
 
-            # patients.phone
-            exists = conn.execute(text("""
-                SELECT 1
-                FROM information_schema.columns
-                WHERE table_name = 'patients' AND column_name = 'phone'
-                LIMIT 1
-            """)).fetchone()
-            if not exists:
-                conn.execute(text("ALTER TABLE patients ADD COLUMN phone VARCHAR;"))
-                print("✅ Migración PostgreSQL: patients.phone agregado")
-
-            # patients.created_at
-            exists = conn.execute(text("""
-                SELECT 1
-                FROM information_schema.columns
-                WHERE table_name = 'patients' AND column_name = 'created_at'
-                LIMIT 1
-            """)).fetchone()
-            if not exists:
-                conn.execute(text("ALTER TABLE patients ADD COLUMN created_at TIMESTAMP;"))
-                print("✅ Migración PostgreSQL: patients.created_at agregado")
-
-            # patients.updated_at
-            exists = conn.execute(text("""
-                SELECT 1
-                FROM information_schema.columns
-                WHERE table_name = 'patients' AND column_name = 'updated_at'
-                LIMIT 1
-            """)).fetchone()
-            if not exists:
-                conn.execute(text("ALTER TABLE patients ADD COLUMN updated_at TIMESTAMP;"))
-                print("✅ Migración PostgreSQL: patients.updated_at agregado")
-
-            # encounters.prescription_json
             exists = conn.execute(text("""
                 SELECT 1
                 FROM information_schema.columns
@@ -250,6 +241,29 @@ def ensure_database_schema():
     print("ℹ️ No hay migraciones manuales configuradas para este motor de base de datos.")
 
 
+def ensure_default_admin_exists():
+    db = SessionLocal()
+    try:
+        admin = db.query(Doctor).filter(Doctor.role == "admin").first()
+        if admin:
+            return
+
+        first_doctor = db.query(Doctor).order_by(Doctor.id.asc()).first()
+        if not first_doctor:
+            return
+
+        first_doctor.role = "admin"
+        first_doctor.is_active = True
+        first_doctor.updated_at = first_doctor.updated_at or first_doctor.created_at
+        db.commit()
+        print(f"✅ Se asignó admin inicial a: {first_doctor.name}")
+    except Exception as e:
+        db.rollback()
+        print("⚠️ Error asignando admin inicial:", repr(e))
+    finally:
+        db.close()
+
+
 def seed_default_doctors_if_enabled():
     if os.getenv("SEED_DEFAULT_DOCTORS", "0") != "1":
         return
@@ -257,16 +271,20 @@ def seed_default_doctors_if_enabled():
     reg1 = (os.getenv("SEED_DOCTOR_1_REG") or "").strip()
     pass1 = (os.getenv("SEED_DOCTOR_1_PASS") or "").strip()
     name1 = (os.getenv("SEED_DOCTOR_1_NAME") or "Doctor 1").strip()
+    user1 = (os.getenv("SEED_DOCTOR_1_USER") or reg1).strip().lower()
+    role1 = (os.getenv("SEED_DOCTOR_1_ROLE") or "admin").strip().lower()
 
     reg2 = (os.getenv("SEED_DOCTOR_2_REG") or "").strip()
     pass2 = (os.getenv("SEED_DOCTOR_2_PASS") or "").strip()
     name2 = (os.getenv("SEED_DOCTOR_2_NAME") or "Doctor 2").strip()
+    user2 = (os.getenv("SEED_DOCTOR_2_USER") or reg2).strip().lower()
+    role2 = (os.getenv("SEED_DOCTOR_2_ROLE") or "doctor").strip().lower()
 
     pairs = []
     if reg1 and pass1:
-        pairs.append((reg1, pass1, name1))
+        pairs.append((reg1, pass1, name1, user1, role1))
     if reg2 and pass2:
-        pairs.append((reg2, pass2, name2))
+        pairs.append((reg2, pass2, name2, user2, role2))
 
     if not pairs:
         print("⚠️ SEED_DEFAULT_DOCTORS=1 pero faltan variables SEED_DOCTOR_*")
@@ -274,23 +292,37 @@ def seed_default_doctors_if_enabled():
 
     db = SessionLocal()
     try:
-        for reg, plain_pass, name in pairs:
+        for reg, plain_pass, name, username, role in pairs:
             existing = db.query(Doctor).filter(Doctor.registration == reg).first()
             if existing:
-                print(f"ℹ️ Doctor ya existe (registration={reg}). No se modifica.")
+                if not existing.username:
+                    existing.username = username
+                if not existing.role:
+                    existing.role = role
+                if not existing.password_hash:
+                    existing.password_hash = pwd_context.hash(plain_pass)
+                    existing.must_change_password = False
+                existing.is_active = True
+                existing.updated_at = existing.updated_at or existing.created_at
+                db.commit()
+                print(f"ℹ️ Doctor ya existe (registration={reg}). Se actualizó lo faltante.")
                 continue
 
             hashed = pwd_context.hash(plain_pass)
             d = Doctor(
                 name=name,
                 registration=reg,
+                username=username,
                 specialty=None,
                 password_hash=hashed,
                 pin="0000",
+                role=role,
+                is_active=True,
+                must_change_password=False,
             )
             db.add(d)
             db.commit()
-            print(f"✅ Doctor creado: {name} (registration={reg})")
+            print(f"✅ Doctor creado: {name} (registration={reg}, username={username})")
 
     except Exception as e:
         db.rollback()
@@ -299,12 +331,42 @@ def seed_default_doctors_if_enabled():
         db.close()
 
 
-# init
+@app.middleware("http")
+async def enforce_password_change(request: Request, call_next):
+    path = request.url.path
+
+    exempt_prefixes = (
+        "/login",
+        "/logout",
+        "/change-password",
+        "/static",
+        "/docs",
+        "/openapi.json",
+        "/redoc",
+        "/favicon.ico",
+    )
+
+    if path.startswith(exempt_prefixes):
+        return await call_next(request)
+
+    doctor_id = request.session.get("doctor_id") if hasattr(request, "session") else None
+    if doctor_id:
+        db = SessionLocal()
+        try:
+            doctor = db.query(Doctor).filter(Doctor.id == int(doctor_id)).first()
+            if doctor and doctor.must_change_password:
+                return RedirectResponse(url="/change-password", status_code=302)
+        finally:
+            db.close()
+
+    return await call_next(request)
+
+
 Base.metadata.create_all(bind=engine)
 ensure_database_schema()
 seed_default_doctors_if_enabled()
+ensure_default_admin_exists()
 
-# API
 app.include_router(auth_router)
 app.include_router(doctors_router)
 app.include_router(patients_router)
@@ -316,9 +378,9 @@ app.include_router(clinical_notes_router)
 app.include_router(pdf_router)
 app.include_router(history_router)
 
-# UI
 app.include_router(ui_router)
 app.include_router(appointments_ui_router)
+app.include_router(professionals_ui_router)
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 

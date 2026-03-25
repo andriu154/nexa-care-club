@@ -1,10 +1,11 @@
+<!-- app/templates/base.html -->
 <!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>NexaCenter</title>
-  <link rel="stylesheet" href="/static/styles.css?v=blue1"/>
+  <link rel="stylesheet" href="/static/styles.css?v=blue2"/>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -32,6 +33,20 @@
           <span>Pacientes</span>
         </a>
 
+        {% if current_doctor and current_doctor.role == 'admin' %}
+        <a class="sidebar-link {% if request.url.path.startswith('/app/professionals') %}active{% endif %}" href="/app/professionals">
+          <span class="sidebar-icon">🩺</span>
+          <span>Profesionales</span>
+        </a>
+        {% endif %}
+
+        {% if current_doctor %}
+        <a class="sidebar-link {% if request.url.path == '/change-password' %}active{% endif %}" href="/change-password">
+          <span class="sidebar-icon">🔐</span>
+          <span>Cambiar contraseña</span>
+        </a>
+        {% endif %}
+
         <a class="sidebar-link" href="/docs" target="_blank">
           <span class="sidebar-icon">📘</span>
           <span>API / Docs</span>
@@ -45,8 +60,14 @@
           <div class="sidebar-user-name">{{ current_doctor.name }}</div>
           <div class="sidebar-user-role">
             {{ current_doctor.specialty if current_doctor.specialty else "Profesional" }}
+            {% if current_doctor.role == 'admin' %}
+              • Administrador
+            {% endif %}
             {% if current_doctor.registration %}
               • Reg. {{ current_doctor.registration }}
+            {% endif %}
+            {% if current_doctor.username %}
+              • @{{ current_doctor.username }}
             {% endif %}
           </div>
         </div>
@@ -76,7 +97,6 @@
     </main>
   </div>
 
-  <!-- Modal global -->
   <div id="nc-modal" class="nc-modal" aria-hidden="true">
     <div class="nc-modal-card" role="dialog" aria-modal="true" aria-labelledby="nc-modal-title">
       <div class="nc-modal-header">
@@ -87,6 +107,6 @@
     </div>
   </div>
 
-  <script defer src="/static/app.js?v=blue1"></script>
+  <script defer src="/static/app.js?v=blue2"></script>
 </body>
 </html>

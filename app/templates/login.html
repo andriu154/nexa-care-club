@@ -1,3 +1,4 @@
+<!-- app/templates/login.html -->
 {% extends "base.html" %}
 
 {% block title %}Login{% endblock %}
@@ -14,12 +15,12 @@
   {% endif %}
 
   <form method="post" action="/login">
-    <label class="label">Registro profesional</label>
+    <label class="label">Usuario o registro profesional</label>
     <input
       class="input"
       type="text"
       name="registration"
-      placeholder="Ej: 1312059627"
+      placeholder="Ej: yiria o 1312059627"
       required
     />
 

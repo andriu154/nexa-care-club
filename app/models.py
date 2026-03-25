@@ -1,3 +1,4 @@
+# app/models.py
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Boolean, Date
 from sqlalchemy.orm import relationship
@@ -5,9 +6,6 @@ from sqlalchemy.orm import relationship
 from .database import Base
 
 
-# =========================
-# DOCTOR
-# =========================
 class Doctor(Base):
     __tablename__ = "doctors"
 
@@ -16,19 +14,23 @@ class Doctor(Base):
 
     specialty = Column(String, nullable=True)
     registration = Column(String, unique=True, index=True, nullable=False)
+    username = Column(String, unique=True, index=True, nullable=True)
 
     password_hash = Column(String, nullable=True)
-
-    # Render: NOT NULL
     pin = Column(String, nullable=False, default="0000")
+
+    role = Column(String, nullable=False, default="doctor")  # admin | doctor
+    is_active = Column(Boolean, nullable=False, default=True)
+    must_change_password = Column(Boolean, nullable=False, default=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, nullable=True)
+    last_login_at = Column(DateTime, nullable=True)
 
     encounters = relationship("Encounter", back_populates="doctor")
     appointments = relationship("Appointment", back_populates="doctor")
 
 
-# =========================
-# PATIENT
-# =========================
 class Patient(Base):
     __tablename__ = "patients"
 
@@ -55,9 +57,6 @@ class Patient(Base):
     appointments = relationship("Appointment", back_populates="patient")
 
 
-# =========================
-# APPOINTMENT (AGENDA)
-# =========================
 class Appointment(Base):
     __tablename__ = "appointments"
 
@@ -70,8 +69,6 @@ class Appointment(Base):
     end_at = Column(DateTime, nullable=False)
 
     status = Column(String, default="scheduled", nullable=False)
-    # scheduled | confirmed | completed | canceled | no_show
-
     reason = Column(String, nullable=True)
     notes = Column(Text, nullable=True)
 
@@ -82,13 +79,9 @@ class Appointment(Base):
 
     doctor = relationship("Doctor", back_populates="appointments")
     patient = relationship("Patient", back_populates="appointments")
-
     encounter = relationship("Encounter", back_populates="appointment", uselist=False)
 
 
-# =========================
-# ENCOUNTER (ATENCIÓN)
-# =========================
 class Encounter(Base):
     __tablename__ = "encounters"
 
@@ -100,7 +93,6 @@ class Encounter(Base):
     visit_type = Column(String, nullable=True)
     chief_complaint_short = Column(String, nullable=True)
 
-    # Receta médica guardada como JSON string
     prescription_json = Column(Text, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
@@ -116,9 +108,6 @@ class Encounter(Base):
     appointment = relationship("Appointment", back_populates="encounter", uselist=False)
 
 
-# =========================
-# CLINICAL NOTE
-# =========================
 class ClinicalNote(Base):
     __tablename__ = "clinical_notes"
 
@@ -158,9 +147,6 @@ class ClinicalNote(Base):
     encounter = relationship("Encounter", back_populates="note")
 
 
-# =========================
-# ENCOUNTER EVOLUTION
-# =========================
 class EncounterEvolution(Base):
     __tablename__ = "encounter_evolutions"
 
@@ -175,9 +161,6 @@ class EncounterEvolution(Base):
     encounter = relationship("Encounter", back_populates="evolutions")
 
 
-# =========================
-# ATTENDANCE (SESIONES)
-# =========================
 class Attendance(Base):
     __tablename__ = "attendance"
 
