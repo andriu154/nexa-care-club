@@ -52,12 +52,6 @@
     gap:12px;
   }
 
-  .prof-grid-3{
-    display:grid;
-    grid-template-columns:1.2fr 1fr .8fr;
-    gap:12px;
-  }
-
   .prof-table{
     display:grid;
     gap:12px;
@@ -69,7 +63,7 @@
     border-radius:18px;
     padding:16px;
     display:grid;
-    gap:12px;
+    gap:14px;
     box-shadow:0 8px 18px rgba(24,39,75,.06);
   }
 
@@ -92,7 +86,7 @@
     color:#64748b;
     font-size:12px;
     font-weight:700;
-    line-height:1.5;
+    line-height:1.6;
   }
 
   .prof-badges{
@@ -132,11 +126,23 @@
     color:#6d28d9;
   }
 
+  .badge-blue{
+    border-color:#bfdbfe;
+    background:#eff6ff;
+    color:#1d4ed8;
+  }
+
+  .prof-edit-box{
+    border:1px solid #e2ebf5;
+    border-radius:16px;
+    background:#fbfdff;
+    padding:14px;
+  }
+
   .prof-actions{
     display:grid;
-    grid-template-columns:1fr auto;
-    gap:10px;
-    align-items:end;
+    grid-template-columns:1fr;
+    gap:12px;
   }
 
   .prof-inline-form{
@@ -146,6 +152,17 @@
     align-items:end;
   }
 
+  .prof-footer-actions{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+  }
+
+  .prof-divider{
+    height:1px;
+    background:#e5edf6;
+  }
+
   @media (max-width: 1100px){
     .prof-shell{
       grid-template-columns:1fr;
@@ -153,9 +170,7 @@
   }
 
   @media (max-width: 700px){
-    .prof-grid-2,
-    .prof-grid-3,
-    .prof-actions{
+    .prof-grid-2{
       grid-template-columns:1fr;
     }
   }
@@ -223,7 +238,7 @@
   <section class="prof-card">
     <div class="prof-head">
       <div class="prof-title">Profesionales registrados</div>
-      <div class="prof-sub">Activa, desactiva o restablece la contraseña temporal de cada usuario.</div>
+      <div class="prof-sub">Edita datos, activa o desactiva usuarios y restablece contraseñas temporales.</div>
     </div>
 
     <div class="prof-body">
@@ -236,7 +251,9 @@
                 <div class="prof-meta">
                   {{ p.specialty if p.specialty else "Sin cargo especificado" }}<br>
                   Registro: {{ p.registration }}<br>
-                  Usuario: {{ p.username if p.username else "—" }}
+                  Usuario: {{ p.username if p.username else "—" }}<br>
+                  Creado: {{ p.created_at_label }}<br>
+                  Último ingreso: {{ p.last_login_at_label }}
                 </div>
               </div>
 
@@ -254,14 +271,67 @@
                 {% endif %}
 
                 {% if p.must_change_password %}
-                  <span class="badge">Debe cambiar clave</span>
+                  <span class="badge badge-blue">Debe cambiar clave</span>
+                {% endif %}
+
+                {% if p.is_self %}
+                  <span class="badge">Tu usuario actual</span>
                 {% endif %}
               </div>
             </div>
 
+            <div class="prof-edit-box">
+              <form method="post" action="/app/professionals/{{ p.id }}/update" class="prof-form">
+                <div class="prof-grid-2">
+                  <div>
+                    <label class="label">Nombre completo</label>
+                    <input class="input" type="text" name="name" value="{{ p.name }}" required>
+                  </div>
+
+                  <div>
+                    <label class="label">Cargo / especialidad</label>
+                    <input class="input" type="text" name="specialty" value="{{ p.specialty if p.specialty else '' }}">
+                  </div>
+                </div>
+
+                <div class="prof-grid-2">
+                  <div>
+                    <label class="label">Registro profesional</label>
+                    <input class="input" type="text" name="registration" value="{{ p.registration }}" required>
+                  </div>
+
+                  <div>
+                    <label class="label">Usuario</label>
+                    <input class="input" type="text" name="username" value="{{ p.username if p.username else '' }}" required>
+                  </div>
+                </div>
+
+                <div class="prof-grid-2">
+                  <div>
+                    <label class="label">Rol</label>
+                    <select class="input" name="role">
+                      <option value="doctor" {% if p.role == 'doctor' %}selected{% endif %}>Doctor</option>
+                      <option value="admin" {% if p.role == 'admin' %}selected{% endif %}>Administrador</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label class="label">Última actualización</label>
+                    <input class="input" type="text" value="{{ p.updated_at_label }}" disabled>
+                  </div>
+                </div>
+
+                <div class="prof-footer-actions">
+                  <button class="btn btn-primary" type="submit">Guardar cambios</button>
+                </div>
+              </form>
+            </div>
+
+            <div class="prof-divider"></div>
+
             <div class="prof-actions">
               <form method="post" action="/app/professionals/{{ p.id }}/reset-password" class="prof-inline-form">
-                <div style="min-width:220px;">
+                <div style="min-width:220px; flex:1;">
                   <label class="label">Nueva contraseña temporal</label>
                   <input class="input" type="text" name="temporary_password" minlength="8" placeholder="Restablecer clave" required>
                 </div>
