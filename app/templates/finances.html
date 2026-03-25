@@ -296,9 +296,16 @@
 
                         <button class="btn btn-outline btn-sm" type="submit">Actualizar servicio</button>
 
-                        <form method="post" action="/app/finances/services/{{ s.id }}/delete" style="display:inline;">
-                          <button class="btn btn-danger btn-sm fin-icon-btn" type="submit" title="Eliminar servicio">🗑</button>
-                        </form>
+                        <button
+                          class="btn btn-danger btn-sm fin-icon-btn"
+                          type="submit"
+                          formaction="/app/finances/services/{{ s.id }}/delete"
+                          formmethod="post"
+                          onclick="return confirm('¿Seguro que deseas eliminar este servicio?');"
+                          title="Eliminar servicio"
+                        >
+                          🗑
+                        </button>
 
                         {% if s.is_active %}
                           <span class="fin-pill pill-green">Activo</span>
