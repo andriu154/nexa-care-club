@@ -9,7 +9,7 @@ from sqlalchemy import text
 from passlib.context import CryptContext
 
 from .database import engine, SessionLocal
-from .models import Base, Doctor
+from .models import Base, Doctor, ServiceCatalog
 
 from .routes.doctors import router as doctors_router
 from .routes.auth import router as auth_router
@@ -24,6 +24,7 @@ from .routes.history import router as history_router
 from .routes.ui import router as ui_router
 from .routes.appointments_ui import router as appointments_ui_router
 from .routes.professionals_ui import router as professionals_ui_router
+from .routes.finances_ui import router as finances_ui_router
 
 app = FastAPI(title="NexaCenter")
 
@@ -337,6 +338,48 @@ def seed_default_doctors_if_enabled():
         db.close()
 
 
+def seed_default_services():
+    defaults = [
+        ("Consulta médica general", "Consulta", 25.00),
+        ("Control subsecuente", "Consulta", 20.00),
+        ("Certificado médico", "Documento", 15.00),
+        ("Procedimiento menor", "Procedimiento", 35.00),
+        ("Teleconsulta", "Consulta", 20.00),
+    ]
+
+    db = SessionLocal()
+    try:
+        for name, category, base_price in defaults:
+            existing = db.query(ServiceCatalog).filter(ServiceCatalog.name == name).first()
+            if existing:
+                if not existing.category:
+                    existing.category = category
+                if not existing.base_price or float(existing.base_price or 0) <= 0:
+                    existing.base_price = base_price
+                if existing.is_active is None:
+                    existing.is_active = True
+                existing.updated_at = datetime.utcnow()
+                continue
+
+            item = ServiceCatalog(
+                name=name,
+                category=category,
+                base_price=base_price,
+                is_active=True,
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow(),
+            )
+            db.add(item)
+
+        db.commit()
+        print("✅ Servicios base verificados")
+    except Exception as e:
+        db.rollback()
+        print("⚠️ Error creando servicios base:", repr(e))
+    finally:
+        db.close()
+
+
 @app.middleware("http")
 async def enforce_password_change(request: Request, call_next):
     path = request.url.path
@@ -377,6 +420,7 @@ Base.metadata.create_all(bind=engine)
 ensure_database_schema()
 seed_default_doctors_if_enabled()
 ensure_default_admin_exists()
+seed_default_services()
 
 app.include_router(auth_router)
 app.include_router(doctors_router)
@@ -392,6 +436,7 @@ app.include_router(history_router)
 app.include_router(ui_router)
 app.include_router(appointments_ui_router)
 app.include_router(professionals_ui_router)
+app.include_router(finances_ui_router)
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 

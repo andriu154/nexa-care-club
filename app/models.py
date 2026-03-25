@@ -1,6 +1,6 @@
 # app/models.py
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Boolean, Date
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Boolean, Date, Numeric
 from sqlalchemy.orm import relationship
 
 from .database import Base
@@ -29,6 +29,7 @@ class Doctor(Base):
 
     encounters = relationship("Encounter", back_populates="doctor")
     appointments = relationship("Appointment", back_populates="doctor")
+    charges = relationship("Charge", back_populates="doctor")
 
 
 class Patient(Base):
@@ -55,6 +56,7 @@ class Patient(Base):
     encounters = relationship("Encounter", back_populates="patient")
     attendances = relationship("Attendance", back_populates="patient")
     appointments = relationship("Appointment", back_populates="patient")
+    charges = relationship("Charge", back_populates="patient")
 
 
 class Appointment(Base):
@@ -80,6 +82,7 @@ class Appointment(Base):
     doctor = relationship("Doctor", back_populates="appointments")
     patient = relationship("Patient", back_populates="appointments")
     encounter = relationship("Encounter", back_populates="appointment", uselist=False)
+    charge = relationship("Charge", back_populates="appointment", uselist=False)
 
 
 class Encounter(Base):
@@ -106,6 +109,7 @@ class Encounter(Base):
     evolutions = relationship("EncounterEvolution", back_populates="encounter")
 
     appointment = relationship("Appointment", back_populates="encounter", uselist=False)
+    charge = relationship("Charge", back_populates="encounter", uselist=False)
 
 
 class ClinicalNote(Base):
@@ -174,3 +178,52 @@ class Attendance(Base):
 
     patient = relationship("Patient", back_populates="attendances")
     doctor = relationship("Doctor", backref="attendances")
+
+
+class ServiceCatalog(Base):
+    __tablename__ = "services"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, unique=True, index=True)
+    category = Column(String, nullable=True)
+    base_price = Column(Numeric(10, 2), nullable=False, default=0)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, nullable=True)
+
+    charges = relationship("Charge", back_populates="service")
+
+
+class Charge(Base):
+    __tablename__ = "charges"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False, index=True)
+    doctor_id = Column(Integer, ForeignKey("doctors.id"), nullable=True, index=True)
+    service_id = Column(Integer, ForeignKey("services.id"), nullable=True, index=True)
+
+    appointment_id = Column(Integer, ForeignKey("appointments.id"), nullable=True, unique=True)
+    encounter_id = Column(Integer, ForeignKey("encounters.id"), nullable=True, unique=True)
+
+    description = Column(String, nullable=True)
+
+    subtotal = Column(Numeric(10, 2), nullable=False, default=0)
+    discount = Column(Numeric(10, 2), nullable=False, default=0)
+    total = Column(Numeric(10, 2), nullable=False, default=0)
+
+    payment_method = Column(String, nullable=False, default="efectivo")
+    payment_status = Column(String, nullable=False, default="pendiente")  # pagado | pendiente | anulado
+
+    charge_date = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    notes = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, nullable=True)
+
+    patient = relationship("Patient", back_populates="charges")
+    doctor = relationship("Doctor", back_populates="charges")
+    service = relationship("ServiceCatalog", back_populates="charges")
+
+    appointment = relationship("Appointment", back_populates="charge", uselist=False)
+    encounter = relationship("Encounter", back_populates="charge", uselist=False)

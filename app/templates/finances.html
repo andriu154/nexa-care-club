@@ -1,0 +1,569 @@
+<!-- app/templates/finances.html -->
+{% extends "base.html" %}
+
+{% block title %}Finanzas{% endblock %}
+
+{% block actions %}
+  <form method="get" action="/app/finances" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+    <input class="input" type="month" name="month" value="{{ selected_month }}" style="min-width:180px;">
+    <select class="input" name="doctor_id" style="min-width:180px;">
+      <option value="">Todos los profesionales</option>
+      {% for d in doctors %}
+        <option value="{{ d.id }}" {% if selected_doctor_id == d.id %}selected{% endif %}>{{ d.name }}</option>
+      {% endfor %}
+    </select>
+    <select class="input" name="service_id" style="min-width:180px;">
+      <option value="">Todos los servicios</option>
+      {% for s in services %}
+        <option value="{{ s.id }}" {% if selected_service_id == s.id %}selected{% endif %}>{{ s.name }}</option>
+      {% endfor %}
+    </select>
+    <select class="input" name="payment_status" style="min-width:160px;">
+      <option value="">Todos los estados</option>
+      <option value="pagado" {% if selected_status == 'pagado' %}selected{% endif %}>Pagado</option>
+      <option value="pendiente" {% if selected_status == 'pendiente' %}selected{% endif %}>Pendiente</option>
+      <option value="anulado" {% if selected_status == 'anulado' %}selected{% endif %}>Anulado</option>
+    </select>
+    <select class="input" name="payment_method" style="min-width:160px;">
+      <option value="">Todos los métodos</option>
+      <option value="efectivo" {% if selected_method == 'efectivo' %}selected{% endif %}>Efectivo</option>
+      <option value="transferencia" {% if selected_method == 'transferencia' %}selected{% endif %}>Transferencia</option>
+      <option value="tarjeta" {% if selected_method == 'tarjeta' %}selected{% endif %}>Tarjeta</option>
+      <option value="mixto" {% if selected_method == 'mixto' %}selected{% endif %}>Mixto</option>
+      <option value="otros" {% if selected_method == 'otros' %}selected{% endif %}>Otros</option>
+    </select>
+    <button class="btn btn-primary" type="submit">Filtrar</button>
+  </form>
+{% endblock %}
+
+{% block content %}
+<style>
+  .fin-grid{
+    display:grid;
+    gap:18px;
+  }
+
+  .fin-summary{
+    display:grid;
+    grid-template-columns:repeat(5, minmax(0, 1fr));
+    gap:14px;
+  }
+
+  .fin-card{
+    background:#fff;
+    border:1px solid #dbe6f3;
+    border-radius:22px;
+    box-shadow:0 10px 28px rgba(24,39,75,.10);
+    overflow:hidden;
+  }
+
+  .fin-head{
+    padding:18px 20px;
+    border-bottom:1px solid #e2ebf5;
+    background:linear-gradient(180deg,#f8fbff 0%, #eff6ff 100%);
+  }
+
+  .fin-title{
+    font-size:18px;
+    font-weight:800;
+    color:#163c7a;
+  }
+
+  .fin-sub{
+    font-size:13px;
+    color:#6b7280;
+    margin-top:4px;
+  }
+
+  .fin-body{
+    padding:18px;
+  }
+
+  .fin-kpi{
+    padding:18px;
+    background:#fff;
+    border:1px solid #dbe6f3;
+    border-radius:20px;
+    box-shadow:0 8px 18px rgba(24,39,75,.06);
+  }
+
+  .fin-kpi-label{
+    font-size:12px;
+    font-weight:800;
+    color:#64748b;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+  }
+
+  .fin-kpi-value{
+    margin-top:8px;
+    font-size:28px;
+    font-weight:800;
+    color:#163c7a;
+  }
+
+  .fin-kpi-sub{
+    margin-top:6px;
+    font-size:12px;
+    color:#6b7280;
+  }
+
+  .fin-two{
+    display:grid;
+    grid-template-columns:minmax(0, 1.1fr) minmax(0, .9fr);
+    gap:18px;
+  }
+
+  .fin-three{
+    display:grid;
+    grid-template-columns:minmax(0, 1.5fr) minmax(320px, .7fr);
+    gap:18px;
+  }
+
+  .fin-form{
+    display:grid;
+    gap:12px;
+  }
+
+  .fin-grid-2{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:12px;
+  }
+
+  .fin-grid-3{
+    display:grid;
+    grid-template-columns:1fr 1fr 1fr;
+    gap:12px;
+  }
+
+  .fin-table{
+    width:100%;
+    border-collapse:collapse;
+  }
+
+  .fin-table th,
+  .fin-table td{
+    padding:12px 10px;
+    border-bottom:1px solid #e5edf6;
+    font-size:13px;
+    text-align:left;
+    vertical-align:top;
+  }
+
+  .fin-table th{
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    color:#64748b;
+    font-weight:800;
+  }
+
+  .fin-table-wrap{
+    overflow:auto;
+  }
+
+  .fin-pill{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    padding:7px 10px;
+    border-radius:999px;
+    font-size:11px;
+    font-weight:800;
+    border:1px solid #dbe6f3;
+    background:#f8fbff;
+    color:#334155;
+  }
+
+  .pill-green{
+    border-color:#bdeccf;
+    background:#ecfff5;
+    color:#087443;
+  }
+
+  .pill-orange{
+    border-color:#f8d79b;
+    background:#fff7e8;
+    color:#9a6700;
+  }
+
+  .pill-red{
+    border-color:#f4c6c8;
+    background:#fff0f1;
+    color:#b42318;
+  }
+
+  .fin-rank{
+    display:grid;
+    gap:10px;
+  }
+
+  .fin-rank-item{
+    border:1px solid #dbe6f3;
+    background:#fff;
+    border-radius:16px;
+    padding:12px 14px;
+    display:flex;
+    justify-content:space-between;
+    gap:12px;
+    align-items:center;
+  }
+
+  .fin-rank-name{
+    font-size:14px;
+    font-weight:800;
+    color:#163c7a;
+  }
+
+  .fin-rank-value{
+    font-size:14px;
+    font-weight:800;
+    color:#0b4dbb;
+  }
+
+  .alert-ok{
+    border-color:#bdeccf !important;
+    background:#ecfff5 !important;
+    color:#087443 !important;
+  }
+
+  @media (max-width: 1280px){
+    .fin-summary{
+      grid-template-columns:repeat(2, minmax(0, 1fr));
+    }
+    .fin-two,
+    .fin-three{
+      grid-template-columns:1fr;
+    }
+  }
+
+  @media (max-width: 700px){
+    .fin-grid-2,
+    .fin-grid-3,
+    .fin-summary{
+      grid-template-columns:1fr;
+    }
+  }
+</style>
+
+<div class="fin-grid">
+  {% if error %}
+    <div class="alert">{{ error }}</div>
+  {% endif %}
+
+  {% if success %}
+    <div class="alert alert-ok">{{ success }}</div>
+  {% endif %}
+
+  <div class="fin-summary">
+    <div class="fin-kpi">
+      <div class="fin-kpi-label">Ingresos pagados del mes</div>
+      <div class="fin-kpi-value">${{ '%.2f'|format(summary.paid_total) }}</div>
+      <div class="fin-kpi-sub">Mes {{ selected_month }}</div>
+    </div>
+
+    <div class="fin-kpi">
+      <div class="fin-kpi-label">Cobrado hoy</div>
+      <div class="fin-kpi-value">${{ '%.2f'|format(summary.paid_today) }}</div>
+      <div class="fin-kpi-sub">Solo cobros marcados como pagados</div>
+    </div>
+
+    <div class="fin-kpi">
+      <div class="fin-kpi-label">Pendiente por cobrar</div>
+      <div class="fin-kpi-value">${{ '%.2f'|format(summary.pending_total) }}</div>
+      <div class="fin-kpi-sub">Cobros aún pendientes</div>
+    </div>
+
+    <div class="fin-kpi">
+      <div class="fin-kpi-label">Ticket promedio</div>
+      <div class="fin-kpi-value">${{ '%.2f'|format(summary.avg_ticket) }}</div>
+      <div class="fin-kpi-sub">Promedio de cobros pagados</div>
+    </div>
+
+    <div class="fin-kpi">
+      <div class="fin-kpi-label">Registros del mes</div>
+      <div class="fin-kpi-value">{{ summary.charge_count }}</div>
+      <div class="fin-kpi-sub">Incluye pagados, pendientes y anulados</div>
+    </div>
+  </div>
+
+  <div class="fin-two">
+    <section class="fin-card">
+      <div class="fin-head">
+        <div class="fin-title">Registrar cobro</div>
+        <div class="fin-sub">
+          Crea cobros manuales por consulta, procedimiento o documento.
+          {% if selected_patient %}
+            Paciente preseleccionado: {{ selected_patient.full_name }}
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="fin-body">
+        <form method="post" action="/app/finances/charges/create" class="fin-form">
+          <input type="hidden" name="encounter_id" value="{{ form_defaults.encounter_id }}">
+
+          <div>
+            <label class="label">Paciente</label>
+            <select class="input" name="patient_id" required>
+              <option value="">Seleccionar paciente</option>
+              {% for p in patients %}
+                <option value="{{ p.id }}" {% if form_defaults.patient_id and form_defaults.patient_id == p.id %}selected{% endif %}>
+                  {{ p.full_name }}{% if p.cedula %} • {{ p.cedula }}{% endif %}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="fin-grid-2">
+            <div>
+              <label class="label">Profesional</label>
+              <select class="input" name="doctor_id">
+                <option value="">Sin asignar</option>
+                {% for d in doctors %}
+                  <option value="{{ d.id }}" {% if form_defaults.doctor_id and form_defaults.doctor_id == d.id %}selected{% endif %}>{{ d.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div>
+              <label class="label">Servicio</label>
+              <select class="input" name="service_id">
+                <option value="">Sin servicio fijo</option>
+                {% for s in services %}
+                  <option value="{{ s.id }}">{{ s.name }}{% if s.base_price is not none %} • ${{ '%.2f'|format(s.base_price|float) }}{% endif %}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label class="label">Descripción</label>
+            <input class="input" type="text" name="description" value="{{ form_defaults.description }}" placeholder="Ej: Consulta médica general">
+          </div>
+
+          <div class="fin-grid-3">
+            <div>
+              <label class="label">Subtotal</label>
+              <input class="input" type="number" step="0.01" min="0" name="subtotal" value="{{ form_defaults.subtotal }}" required>
+            </div>
+
+            <div>
+              <label class="label">Descuento</label>
+              <input class="input" type="number" step="0.01" min="0" name="discount" value="{{ form_defaults.discount }}">
+            </div>
+
+            <div>
+              <label class="label">Fecha de cobro</label>
+              <input class="input" type="date" name="charge_date" value="{{ form_defaults.charge_date }}">
+            </div>
+          </div>
+
+          <div class="fin-grid-2">
+            <div>
+              <label class="label">Método de pago</label>
+              <select class="input" name="payment_method">
+                <option value="efectivo">Efectivo</option>
+                <option value="transferencia">Transferencia</option>
+                <option value="tarjeta">Tarjeta</option>
+                <option value="mixto">Mixto</option>
+                <option value="otros">Otros</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="label">Estado de pago</label>
+              <select class="input" name="payment_status">
+                <option value="pagado">Pagado</option>
+                <option value="pendiente">Pendiente</option>
+                <option value="anulado">Anulado</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label class="label">Notas</label>
+            <textarea class="textarea" name="notes" placeholder="Referencia de transferencia, detalle del procedimiento, observaciones...">{{ form_defaults.notes }}</textarea>
+          </div>
+
+          <button class="btn btn-primary" type="submit">Guardar cobro</button>
+        </form>
+      </div>
+    </section>
+
+    <section class="fin-card">
+      <div class="fin-head">
+        <div class="fin-title">Catálogo de servicios</div>
+        <div class="fin-sub">Define servicios base y sus precios de referencia.</div>
+      </div>
+
+      <div class="fin-body">
+        <form method="post" action="/app/finances/services/create" class="fin-form">
+          <div>
+            <label class="label">Nombre del servicio</label>
+            <input class="input" type="text" name="name" placeholder="Ej: Consulta médica general" required>
+          </div>
+
+          <div class="fin-grid-2">
+            <div>
+              <label class="label">Categoría</label>
+              <input class="input" type="text" name="category" value="Consulta" required>
+            </div>
+
+            <div>
+              <label class="label">Precio base</label>
+              <input class="input" type="number" step="0.01" min="0" name="base_price" required>
+            </div>
+          </div>
+
+          <button class="btn btn-outline" type="submit">Guardar servicio</button>
+        </form>
+
+        <div style="height:18px;"></div>
+
+        <div class="fin-table-wrap">
+          <table class="fin-table">
+            <thead>
+              <tr>
+                <th>Servicio</th>
+                <th>Categoría</th>
+                <th>Precio base</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for s in services %}
+                <tr>
+                  <td>{{ s.name }}</td>
+                  <td>{{ s.category if s.category else "—" }}</td>
+                  <td>${{ '%.2f'|format(s.base_price|float) }}</td>
+                  <td>
+                    {% if s.is_active %}
+                      <span class="fin-pill pill-green">Activo</span>
+                    {% else %}
+                      <span class="fin-pill">Inactivo</span>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% else %}
+                <tr>
+                  <td colspan="4">No hay servicios registrados.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="fin-three">
+    <section class="fin-card">
+      <div class="fin-head">
+        <div class="fin-title">Cobros recientes del mes</div>
+        <div class="fin-sub">Vista resumida de caja clínica para seguimiento operativo.</div>
+      </div>
+
+      <div class="fin-body">
+        <div class="fin-table-wrap">
+          <table class="fin-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Paciente</th>
+                <th>Servicio / detalle</th>
+                <th>Profesional</th>
+                <th>Método</th>
+                <th>Total</th>
+                <th>Estado</th>
+                <th>Cambiar</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for c in recent_charges %}
+                <tr>
+                  <td>{{ c.charge_date.strftime("%Y-%m-%d") if c.charge_date else "—" }}</td>
+                  <td>
+                    {{ c.patient.full_name if c.patient else "—" }}
+                    {% if c.patient and c.patient.cedula %}
+                      <div class="muted">{{ c.patient.cedula }}</div>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {{ c.service.name if c.service else (c.description if c.description else "—") }}
+                    {% if c.notes %}
+                      <div class="muted">{{ c.notes }}</div>
+                    {% endif %}
+                  </td>
+                  <td>{{ c.doctor.name if c.doctor else "—" }}</td>
+                  <td>{{ c.payment_method|capitalize }}</td>
+                  <td>${{ '%.2f'|format(c.total|float) }}</td>
+                  <td>
+                    {% if c.payment_status == 'pagado' %}
+                      <span class="fin-pill pill-green">Pagado</span>
+                    {% elif c.payment_status == 'pendiente' %}
+                      <span class="fin-pill pill-orange">Pendiente</span>
+                    {% else %}
+                      <span class="fin-pill pill-red">Anulado</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <form method="post" action="/app/finances/charges/{{ c.id }}/status" style="display:grid; gap:8px;">
+                      <select class="input" name="payment_status" style="min-width:140px;">
+                        <option value="pagado" {% if c.payment_status == 'pagado' %}selected{% endif %}>Pagado</option>
+                        <option value="pendiente" {% if c.payment_status == 'pendiente' %}selected{% endif %}>Pendiente</option>
+                        <option value="anulado" {% if c.payment_status == 'anulado' %}selected{% endif %}>Anulado</option>
+                      </select>
+                      <button class="btn btn-outline btn-sm" type="submit">Actualizar</button>
+                    </form>
+                  </td>
+                </tr>
+              {% else %}
+                <tr>
+                  <td colspan="8">No hay cobros registrados para este filtro.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="fin-card">
+      <div class="fin-head">
+        <div class="fin-title">Rankings del mes</div>
+        <div class="fin-sub">Solo consideran cobros pagados.</div>
+      </div>
+
+      <div class="fin-body">
+        <div class="fin-title" style="font-size:15px; margin-bottom:10px;">Por profesional</div>
+        <div class="fin-rank">
+          {% for name, amount in ranking_doctors[:8] %}
+            <div class="fin-rank-item">
+              <div class="fin-rank-name">{{ name }}</div>
+              <div class="fin-rank-value">${{ '%.2f'|format(amount) }}</div>
+            </div>
+          {% else %}
+            <div class="empty">Aún no hay cobros pagados para mostrar.</div>
+          {% endfor %}
+        </div>
+
+        <div style="height:18px;"></div>
+
+        <div class="fin-title" style="font-size:15px; margin-bottom:10px;">Por servicio</div>
+        <div class="fin-rank">
+          {% for name, amount in ranking_services[:8] %}
+            <div class="fin-rank-item">
+              <div class="fin-rank-name">{{ name }}</div>
+              <div class="fin-rank-value">${{ '%.2f'|format(amount) }}</div>
+            </div>
+          {% else %}
+            <div class="empty">Aún no hay servicios con cobros pagados.</div>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

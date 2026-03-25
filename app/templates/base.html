@@ -5,7 +5,7 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>NexaCenter</title>
-  <link rel="stylesheet" href="/static/styles.css?v=blue2"/>
+  <link rel="stylesheet" href="/static/styles.css?v=blue3"/>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -37,6 +37,11 @@
         <a class="sidebar-link {% if request.url.path.startswith('/app/professionals') %}active{% endif %}" href="/app/professionals">
           <span class="sidebar-icon">🩺</span>
           <span>Profesionales</span>
+        </a>
+
+        <a class="sidebar-link {% if request.url.path.startswith('/app/finances') %}active{% endif %}" href="/app/finances">
+          <span class="sidebar-icon">💵</span>
+          <span>Finanzas</span>
         </a>
         {% endif %}
 
@@ -107,6 +112,6 @@
     </div>
   </div>
 
-  <script defer src="/static/app.js?v=blue2"></script>
+  <script defer src="/static/app.js?v=blue3"></script>
 </body>
 </html>
