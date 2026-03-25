@@ -1,4 +1,5 @@
 # app/main.py
+from datetime import datetime
 from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -157,6 +158,62 @@ def ensure_sqlite_schema():
                     conn.execute(text("ALTER TABLE encounters ADD COLUMN prescription_json TEXT;"))
                     print("✅ Migración SQLite: encounters.prescription_json agregado")
 
+            tbls = conn.execute(
+                text("SELECT name FROM sqlite_master WHERE type='table' AND name='services';")
+            ).fetchone()
+            if tbls:
+                cols = conn.execute(text("PRAGMA table_info(services);")).fetchall()
+                col_names = {c[1] for c in cols}
+
+                if "category" not in col_names:
+                    conn.execute(text("ALTER TABLE services ADD COLUMN category VARCHAR;"))
+                    print("✅ Migración SQLite: services.category agregado")
+
+                if "base_price" not in col_names:
+                    conn.execute(text("ALTER TABLE services ADD COLUMN base_price NUMERIC(10,2) NOT NULL DEFAULT 0;"))
+                    print("✅ Migración SQLite: services.base_price agregado")
+
+                if "is_active" not in col_names:
+                    conn.execute(text("ALTER TABLE services ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT 1;"))
+                    print("✅ Migración SQLite: services.is_active agregado")
+
+                if "created_at" not in col_names:
+                    conn.execute(text("ALTER TABLE services ADD COLUMN created_at DATETIME;"))
+                    print("✅ Migración SQLite: services.created_at agregado")
+
+                if "updated_at" not in col_names:
+                    conn.execute(text("ALTER TABLE services ADD COLUMN updated_at DATETIME;"))
+                    print("✅ Migración SQLite: services.updated_at agregado")
+
+            tblc = conn.execute(
+                text("SELECT name FROM sqlite_master WHERE type='table' AND name='charges';")
+            ).fetchone()
+            if tblc:
+                cols = conn.execute(text("PRAGMA table_info(charges);")).fetchall()
+                col_names = {c[1] for c in cols}
+
+                needed = {
+                    "patient_id": "INTEGER",
+                    "doctor_id": "INTEGER",
+                    "service_id": "INTEGER",
+                    "appointment_id": "INTEGER",
+                    "encounter_id": "INTEGER",
+                    "description": "VARCHAR",
+                    "subtotal": "NUMERIC(10,2)",
+                    "discount": "NUMERIC(10,2)",
+                    "total": "NUMERIC(10,2)",
+                    "payment_method": "VARCHAR",
+                    "payment_status": "VARCHAR",
+                    "charge_date": "DATETIME",
+                    "notes": "TEXT",
+                    "created_at": "DATETIME",
+                    "updated_at": "DATETIME",
+                }
+                for col_name, col_type in needed.items():
+                    if col_name not in col_names:
+                        conn.execute(text(f"ALTER TABLE charges ADD COLUMN {col_name} {col_type};"))
+                        print(f"✅ Migración SQLite: charges.{col_name} agregado")
+
     except Exception as e:
         print("⚠️ Error en migración SQLite:", repr(e))
 
@@ -228,6 +285,54 @@ def ensure_postgres_schema():
             if not exists:
                 conn.execute(text("ALTER TABLE encounters ADD COLUMN prescription_json TEXT;"))
                 print("✅ Migración PostgreSQL: encounters.prescription_json agregado")
+
+            service_columns = {
+                "category": "ALTER TABLE services ADD COLUMN category VARCHAR;",
+                "base_price": "ALTER TABLE services ADD COLUMN base_price NUMERIC(10,2) NOT NULL DEFAULT 0;",
+                "is_active": "ALTER TABLE services ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE;",
+                "created_at": "ALTER TABLE services ADD COLUMN created_at TIMESTAMP;",
+                "updated_at": "ALTER TABLE services ADD COLUMN updated_at TIMESTAMP;",
+            }
+
+            for col_name, sql in service_columns.items():
+                exists = conn.execute(text(f"""
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'services' AND column_name = '{col_name}'
+                    LIMIT 1
+                """)).fetchone()
+                if not exists:
+                    conn.execute(text(sql))
+                    print(f"✅ Migración PostgreSQL: services.{col_name} agregado")
+
+            charge_columns = {
+                "patient_id": "ALTER TABLE charges ADD COLUMN patient_id INTEGER;",
+                "doctor_id": "ALTER TABLE charges ADD COLUMN doctor_id INTEGER;",
+                "service_id": "ALTER TABLE charges ADD COLUMN service_id INTEGER;",
+                "appointment_id": "ALTER TABLE charges ADD COLUMN appointment_id INTEGER;",
+                "encounter_id": "ALTER TABLE charges ADD COLUMN encounter_id INTEGER;",
+                "description": "ALTER TABLE charges ADD COLUMN description VARCHAR;",
+                "subtotal": "ALTER TABLE charges ADD COLUMN subtotal NUMERIC(10,2) NOT NULL DEFAULT 0;",
+                "discount": "ALTER TABLE charges ADD COLUMN discount NUMERIC(10,2) NOT NULL DEFAULT 0;",
+                "total": "ALTER TABLE charges ADD COLUMN total NUMERIC(10,2) NOT NULL DEFAULT 0;",
+                "payment_method": "ALTER TABLE charges ADD COLUMN payment_method VARCHAR NOT NULL DEFAULT 'efectivo';",
+                "payment_status": "ALTER TABLE charges ADD COLUMN payment_status VARCHAR NOT NULL DEFAULT 'pendiente';",
+                "charge_date": "ALTER TABLE charges ADD COLUMN charge_date TIMESTAMP;",
+                "notes": "ALTER TABLE charges ADD COLUMN notes TEXT;",
+                "created_at": "ALTER TABLE charges ADD COLUMN created_at TIMESTAMP;",
+                "updated_at": "ALTER TABLE charges ADD COLUMN updated_at TIMESTAMP;",
+            }
+
+            for col_name, sql in charge_columns.items():
+                exists = conn.execute(text(f"""
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'charges' AND column_name = '{col_name}'
+                    LIMIT 1
+                """)).fetchone()
+                if not exists:
+                    conn.execute(text(sql))
+                    print(f"✅ Migración PostgreSQL: charges.{col_name} agregado")
 
     except Exception as e:
         print("⚠️ Error en migración PostgreSQL:", repr(e))
@@ -354,7 +459,7 @@ def seed_default_services():
             if existing:
                 if not existing.category:
                     existing.category = category
-                if not existing.base_price or float(existing.base_price or 0) <= 0:
+                if existing.base_price is None or float(existing.base_price or 0) <= 0:
                     existing.base_price = base_price
                 if existing.is_active is None:
                     existing.is_active = True
