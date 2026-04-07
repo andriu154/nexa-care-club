@@ -208,17 +208,23 @@ def _render_finances(
 
     for c in month_charges:
         c.display_service_label = _charge_service_label(c, services)
+        c.display_expense_amount = _to_float(getattr(c, "expense_amount", 0))
+        c.display_profit = round(_to_float(c.total) - c.display_expense_amount, 2)
 
     today_local = datetime.now(APP_TZ).date()
 
     paid_total = sum(_to_float(c.total) for c in month_charges if c.payment_status == "pagado")
     pending_total = sum(_to_float(c.total) for c in month_charges if c.payment_status == "pendiente")
     canceled_total = sum(_to_float(c.total) for c in month_charges if c.payment_status == "anulado")
+    paid_expense_total = sum(_to_float(c.expense_amount) for c in month_charges if c.payment_status == "pagado")
+    net_profit_total = round(paid_total - paid_expense_total, 2)
+
     paid_today = sum(
         _to_float(c.total)
         for c in month_charges
         if c.payment_status == "pagado" and c.charge_date and c.charge_date.date() == today_local
     )
+
     paid_count = sum(1 for c in month_charges if c.payment_status == "pagado")
     avg_ticket = round((paid_total / paid_count), 2) if paid_count else 0.0
 
@@ -234,11 +240,22 @@ def _render_finances(
         doctor_ranking[doctor_name] += _to_float(c.total)
 
         service_name = c.display_service_label or "Sin servicio"
-        service_ranking.setdefault(service_name, 0.0)
-        service_ranking[service_name] += _to_float(c.total)
+        service_stats = service_ranking.setdefault(
+            service_name,
+            {
+                "income": 0.0,
+                "expense": 0.0,
+                "profit": 0.0,
+                "count": 0,
+            },
+        )
+        service_stats["income"] += _to_float(c.total)
+        service_stats["expense"] += _to_float(c.expense_amount)
+        service_stats["profit"] += round(_to_float(c.total) - _to_float(c.expense_amount), 2)
+        service_stats["count"] += 1
 
     ranking_doctors = sorted(doctor_ranking.items(), key=lambda x: x[1], reverse=True)
-    ranking_services = sorted(service_ranking.items(), key=lambda x: x[1], reverse=True)
+    ranking_services = sorted(service_ranking.items(), key=lambda x: x[1]["profit"], reverse=True)
 
     recent_charges = month_charges[:30]
 
@@ -260,6 +277,7 @@ def _render_finances(
         "description": "",
         "subtotal": "",
         "discount": "0.00",
+        "expense_amount": "0.00",
         "payment_method": "efectivo",
         "payment_status": "pagado",
         "charge_date": today_local.strftime("%Y-%m-%d"),
@@ -285,6 +303,8 @@ def _render_finances(
                 "canceled_total": round(canceled_total, 2),
                 "paid_today": round(paid_today, 2),
                 "avg_ticket": round(avg_ticket, 2),
+                "paid_expense_total": round(paid_expense_total, 2),
+                "net_profit_total": round(net_profit_total, 2),
                 "charge_count": len(month_charges),
             },
             "recent_charges": recent_charges,
@@ -316,6 +336,7 @@ def create_service(
     name: str = Form(...),
     category: str = Form("Consulta"),
     base_price: str = Form(...),
+    base_cost: str = Form("0"),
 ):
     current_doctor = get_logged_doctor(request, db)
     if not current_doctor:
@@ -326,6 +347,7 @@ def create_service(
     name = (name or "").strip()
     category = (category or "Consulta").strip()
     price = _parse_money(base_price)
+    cost = _parse_money(base_cost)
 
     if not name:
         return _render_finances(request, current_doctor, db, error="El nombre del servicio es obligatorio.")
@@ -333,10 +355,14 @@ def create_service(
     if price < 0:
         return _render_finances(request, current_doctor, db, error="El precio no puede ser negativo.")
 
+    if cost < 0:
+        return _render_finances(request, current_doctor, db, error="El costo base no puede ser negativo.")
+
     existing = db.query(ServiceCatalog).filter(ServiceCatalog.name == name).first()
     if existing:
         existing.category = category or existing.category
         existing.base_price = price
+        existing.base_cost = cost
         existing.is_active = True
         existing.updated_at = datetime.utcnow()
         db.commit()
@@ -346,6 +372,7 @@ def create_service(
         name=name,
         category=category,
         base_price=price,
+        base_cost=cost,
         is_active=True,
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow(),
@@ -364,6 +391,7 @@ def update_service(
     name: str = Form(...),
     category: str = Form("Consulta"),
     base_price: str = Form(...),
+    base_cost: str = Form("0"),
     is_active: str | None = Form(None),
 ):
     current_doctor = get_logged_doctor(request, db)
@@ -379,6 +407,7 @@ def update_service(
     name = (name or "").strip()
     category = (category or "Consulta").strip()
     price = _parse_money(base_price)
+    cost = _parse_money(base_cost)
     active = bool(is_active)
 
     if not name:
@@ -386,6 +415,9 @@ def update_service(
 
     if price < 0:
         return _render_finances(request, current_doctor, db, error="El precio no puede ser negativo.")
+
+    if cost < 0:
+        return _render_finances(request, current_doctor, db, error="El costo base no puede ser negativo.")
 
     duplicate = (
         db.query(ServiceCatalog)
@@ -399,6 +431,7 @@ def update_service(
     service.name = name
     service.category = category
     service.base_price = price
+    service.base_cost = cost
     service.is_active = active
     service.updated_at = datetime.utcnow()
     db.commit()
@@ -450,6 +483,7 @@ def create_charge(
     description: str = Form(""),
     subtotal: str = Form(...),
     discount: str = Form("0"),
+    expense_amount: str = Form("0"),
     payment_method: str = Form("efectivo"),
     payment_status: str = Form("pagado"),
     charge_date: str = Form(""),
@@ -475,15 +509,22 @@ def create_charge(
 
     subtotal_value = _parse_money(subtotal)
     discount_value = _parse_money(discount)
+    expense_value = _parse_money(expense_amount)
 
     if subtotal_value <= 0 and service:
         subtotal_value = _to_float(service.base_price)
+
+    if expense_value <= 0 and service:
+        expense_value = _to_float(service.base_cost)
 
     if subtotal_value <= 0:
         return _render_finances(request, current_doctor, db, error="El subtotal debe ser mayor a 0.")
 
     if discount_value < 0:
         return _render_finances(request, current_doctor, db, error="El descuento no puede ser negativo.")
+
+    if expense_value < 0:
+        return _render_finances(request, current_doctor, db, error="La inversión no puede ser negativa.")
 
     total_value = round(max(0.0, subtotal_value - discount_value), 2)
 
@@ -520,6 +561,7 @@ def create_charge(
         subtotal=subtotal_value,
         discount=discount_value,
         total=total_value,
+        expense_amount=expense_value,
         payment_method=payment_method,
         payment_status=payment_status,
         charge_date=charge_dt,
@@ -530,11 +572,16 @@ def create_charge(
     db.add(charge)
     db.commit()
 
+    net_profit = round(total_value - expense_value, 2)
+
     return _render_finances(
         request,
         current_doctor,
         db,
-        success=f"Cobro registrado correctamente para {patient.full_name}. Total: ${total_value:.2f}",
+        success=(
+            f"Cobro registrado correctamente para {patient.full_name}. "
+            f"Ingreso: ${total_value:.2f} · Egreso: ${expense_value:.2f} · Ganancia: ${net_profit:.2f}"
+        ),
     )
 
 

@@ -173,6 +173,10 @@ def ensure_sqlite_schema():
                     conn.execute(text("ALTER TABLE services ADD COLUMN base_price NUMERIC(10,2) NOT NULL DEFAULT 0;"))
                     print("✅ Migración SQLite: services.base_price agregado")
 
+                if "base_cost" not in col_names:
+                    conn.execute(text("ALTER TABLE services ADD COLUMN base_cost NUMERIC(10,2) NOT NULL DEFAULT 0;"))
+                    print("✅ Migración SQLite: services.base_cost agregado")
+
                 if "is_active" not in col_names:
                     conn.execute(text("ALTER TABLE services ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT 1;"))
                     print("✅ Migración SQLite: services.is_active agregado")
@@ -202,6 +206,7 @@ def ensure_sqlite_schema():
                     "subtotal": "NUMERIC(10,2)",
                     "discount": "NUMERIC(10,2)",
                     "total": "NUMERIC(10,2)",
+                    "expense_amount": "NUMERIC(10,2) NOT NULL DEFAULT 0",
                     "payment_method": "VARCHAR",
                     "payment_status": "VARCHAR",
                     "charge_date": "DATETIME",
@@ -289,6 +294,7 @@ def ensure_postgres_schema():
             service_columns = {
                 "category": "ALTER TABLE services ADD COLUMN category VARCHAR;",
                 "base_price": "ALTER TABLE services ADD COLUMN base_price NUMERIC(10,2) NOT NULL DEFAULT 0;",
+                "base_cost": "ALTER TABLE services ADD COLUMN base_cost NUMERIC(10,2) NOT NULL DEFAULT 0;",
                 "is_active": "ALTER TABLE services ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE;",
                 "created_at": "ALTER TABLE services ADD COLUMN created_at TIMESTAMP;",
                 "updated_at": "ALTER TABLE services ADD COLUMN updated_at TIMESTAMP;",
@@ -315,6 +321,7 @@ def ensure_postgres_schema():
                 "subtotal": "ALTER TABLE charges ADD COLUMN subtotal NUMERIC(10,2) NOT NULL DEFAULT 0;",
                 "discount": "ALTER TABLE charges ADD COLUMN discount NUMERIC(10,2) NOT NULL DEFAULT 0;",
                 "total": "ALTER TABLE charges ADD COLUMN total NUMERIC(10,2) NOT NULL DEFAULT 0;",
+                "expense_amount": "ALTER TABLE charges ADD COLUMN expense_amount NUMERIC(10,2) NOT NULL DEFAULT 0;",
                 "payment_method": "ALTER TABLE charges ADD COLUMN payment_method VARCHAR NOT NULL DEFAULT 'efectivo';",
                 "payment_status": "ALTER TABLE charges ADD COLUMN payment_status VARCHAR NOT NULL DEFAULT 'pendiente';",
                 "charge_date": "ALTER TABLE charges ADD COLUMN charge_date TIMESTAMP;",
@@ -445,22 +452,24 @@ def seed_default_doctors_if_enabled():
 
 def seed_default_services():
     defaults = [
-        ("Consulta médica general", "Consulta", 25.00),
-        ("Control subsecuente", "Consulta", 20.00),
-        ("Certificado médico", "Documento", 15.00),
-        ("Procedimiento menor", "Procedimiento", 35.00),
-        ("Teleconsulta", "Consulta", 20.00),
+        ("Consulta médica general", "Consulta", 25.00, 0.00),
+        ("Control subsecuente", "Consulta", 20.00, 0.00),
+        ("Certificado médico", "Documento", 15.00, 0.00),
+        ("Procedimiento menor", "Procedimiento", 35.00, 5.00),
+        ("Teleconsulta", "Consulta", 20.00, 0.00),
     ]
 
     db = SessionLocal()
     try:
-        for name, category, base_price in defaults:
+        for name, category, base_price, base_cost in defaults:
             existing = db.query(ServiceCatalog).filter(ServiceCatalog.name == name).first()
             if existing:
                 if not existing.category:
                     existing.category = category
                 if existing.base_price is None or float(existing.base_price or 0) <= 0:
                     existing.base_price = base_price
+                if existing.base_cost is None or float(existing.base_cost or 0) < 0:
+                    existing.base_cost = base_cost
                 if existing.is_active is None:
                     existing.is_active = True
                 existing.updated_at = datetime.utcnow()
@@ -470,6 +479,7 @@ def seed_default_services():
                 name=name,
                 category=category,
                 base_price=base_price,
+                base_cost=base_cost,
                 is_active=True,
                 created_at=datetime.utcnow(),
                 updated_at=datetime.utcnow(),

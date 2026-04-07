@@ -39,7 +39,7 @@
 {% block content %}
 <style>
   .fin-grid{display:grid;gap:18px}
-  .fin-summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px}
+  .fin-summary{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px}
   .fin-card{background:#fff;border:1px solid #dbe6f3;border-radius:22px;box-shadow:0 10px 28px rgba(24,39,75,.10);overflow:hidden}
   .fin-head{padding:18px 20px;border-bottom:1px solid #e2ebf5;background:linear-gradient(180deg,#f8fbff 0%, #eff6ff 100%)}
   .fin-title{font-size:18px;font-weight:800;color:#163c7a}
@@ -50,10 +50,11 @@
   .fin-kpi-value{margin-top:8px;font-size:28px;font-weight:800;color:#163c7a}
   .fin-kpi-sub{margin-top:6px;font-size:12px;color:#6b7280}
   .fin-two{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:18px}
-  .fin-three{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(320px,.7fr);gap:18px}
+  .fin-three{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(340px,.8fr);gap:18px}
   .fin-form{display:grid;gap:12px}
   .fin-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   .fin-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+  .fin-grid-4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px}
   .fin-table{width:100%;border-collapse:collapse}
   .fin-table th,.fin-table td{padding:12px 10px;border-bottom:1px solid #e5edf6;font-size:13px;text-align:left;vertical-align:top}
   .fin-table th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#64748b;font-weight:800}
@@ -66,12 +67,16 @@
   .fin-rank-item{border:1px solid #dbe6f3;background:#fff;border-radius:16px;padding:12px 14px;display:flex;justify-content:space-between;gap:12px;align-items:center}
   .fin-rank-name{font-size:14px;font-weight:800;color:#163c7a}
   .fin-rank-value{font-size:14px;font-weight:800;color:#0b4dbb}
+  .fin-rank-meta{font-size:12px;color:#6b7280;margin-top:3px}
   .alert-ok{border-color:#bdeccf !important;background:#ecfff5 !important;color:#087443 !important}
   .fin-service-edit{display:grid;gap:8px}
   .fin-service-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .fin-icon-btn{min-width:auto;padding:10px 12px;line-height:1}
-  @media (max-width:1280px){.fin-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.fin-two,.fin-three{grid-template-columns:1fr}}
-  @media (max-width:700px){.fin-grid-2,.fin-grid-3,.fin-summary{grid-template-columns:1fr}}
+  .fin-money-positive{font-weight:800;color:#087443}
+  .fin-money-neutral{font-weight:800;color:#163c7a}
+  .fin-money-expense{font-weight:800;color:#9a6700}
+  @media (max-width:1380px){.fin-summary{grid-template-columns:repeat(3,minmax(0,1fr))}.fin-two,.fin-three{grid-template-columns:1fr}}
+  @media (max-width:900px){.fin-grid-2,.fin-grid-3,.fin-grid-4,.fin-summary{grid-template-columns:1fr}}
 </style>
 
 <div class="fin-grid">
@@ -91,6 +96,18 @@
     </div>
 
     <div class="fin-kpi">
+      <div class="fin-kpi-label">Egresos pagados del mes</div>
+      <div class="fin-kpi-value">${{ '%.2f'|format(summary.paid_expense_total) }}</div>
+      <div class="fin-kpi-sub">Suma de inversión real registrada</div>
+    </div>
+
+    <div class="fin-kpi">
+      <div class="fin-kpi-label">Ganancia neta</div>
+      <div class="fin-kpi-value">${{ '%.2f'|format(summary.net_profit_total) }}</div>
+      <div class="fin-kpi-sub">Ingresos pagados menos egresos</div>
+    </div>
+
+    <div class="fin-kpi">
       <div class="fin-kpi-label">Cobrado hoy</div>
       <div class="fin-kpi-value">${{ '%.2f'|format(summary.paid_today) }}</div>
       <div class="fin-kpi-sub">Solo cobros marcados como pagados</div>
@@ -100,12 +117,6 @@
       <div class="fin-kpi-label">Pendiente por cobrar</div>
       <div class="fin-kpi-value">${{ '%.2f'|format(summary.pending_total) }}</div>
       <div class="fin-kpi-sub">Cobros aún pendientes</div>
-    </div>
-
-    <div class="fin-kpi">
-      <div class="fin-kpi-label">Ticket promedio</div>
-      <div class="fin-kpi-value">${{ '%.2f'|format(summary.avg_ticket) }}</div>
-      <div class="fin-kpi-sub">Promedio de cobros pagados</div>
     </div>
 
     <div class="fin-kpi">
@@ -157,12 +168,13 @@
             <div>
               <label class="label">Servicio</label>
               <select class="input" id="charge-service-select" name="service_id">
-                <option value="" data-name="" data-price="">Sin servicio fijo</option>
+                <option value="" data-name="" data-price="" data-cost="">Sin servicio fijo</option>
                 {% for s in services %}
                   <option
                     value="{{ s.id }}"
                     data-name="{{ s.name }}"
                     data-price="{{ '%.2f'|format(s.base_price|float) }}"
+                    data-cost="{{ '%.2f'|format((s.base_cost or 0)|float) }}"
                   >
                     {{ s.name }}{% if s.base_price is not none %} • ${{ '%.2f'|format(s.base_price|float) }}{% endif %}
                   </option>
@@ -173,10 +185,10 @@
 
           <div>
             <label class="label">Descripción</label>
-            <input class="input" id="charge-description" type="text" name="description" value="{{ form_defaults.description }}" placeholder="Ej: Consulta médica general">
+            <input class="input" id="charge-description" type="text" name="description" value="{{ form_defaults.description }}" placeholder="Ej: Rinomodelación con ácido hialurónico">
           </div>
 
-          <div class="fin-grid-3">
+          <div class="fin-grid-4">
             <div>
               <label class="label">Subtotal</label>
               <input class="input" id="charge-subtotal" type="number" step="0.01" min="0" name="subtotal" value="{{ form_defaults.subtotal }}" required>
@@ -185,6 +197,11 @@
             <div>
               <label class="label">Descuento</label>
               <input class="input" type="number" step="0.01" min="0" name="discount" value="{{ form_defaults.discount }}">
+            </div>
+
+            <div>
+              <label class="label">Inversión real</label>
+              <input class="input" id="charge-expense" type="number" step="0.01" min="0" name="expense_amount" value="{{ form_defaults.expense_amount }}">
             </div>
 
             <div>
@@ -228,17 +245,17 @@
     <section class="fin-card">
       <div class="fin-head">
         <div class="fin-title">Catálogo de servicios</div>
-        <div class="fin-sub">Crea, edita, activa, desactiva o elimina servicios sin cobros asociados.</div>
+        <div class="fin-sub">Define el precio de venta y un costo base estimado para autollenar la inversión por procedimiento.</div>
       </div>
 
       <div class="fin-body">
         <form method="post" action="/app/finances/services/create" class="fin-form">
           <div>
             <label class="label">Nombre del servicio</label>
-            <input class="input" type="text" name="name" placeholder="Ej: Consulta médica general" required>
+            <input class="input" type="text" name="name" placeholder="Ej: Rinomodelación" required>
           </div>
 
-          <div class="fin-grid-2">
+          <div class="fin-grid-3">
             <div>
               <label class="label">Categoría</label>
               <input class="input" type="text" name="category" value="Consulta" required>
@@ -247,6 +264,11 @@
             <div>
               <label class="label">Precio base</label>
               <input class="input" type="number" step="0.01" min="0" name="base_price" required>
+            </div>
+
+            <div>
+              <label class="label">Costo base estimado</label>
+              <input class="input" type="number" step="0.01" min="0" name="base_cost" value="0">
             </div>
           </div>
 
@@ -262,6 +284,7 @@
                 <th>Servicio</th>
                 <th>Categoría</th>
                 <th>Precio base</th>
+                <th>Costo base</th>
                 <th>Estado</th>
                 <th>Acciones</th>
               </tr>
@@ -269,9 +292,9 @@
             <tbody>
               {% for s in services %}
                 <tr>
-                  <td colspan="5">
+                  <td colspan="6">
                     <form method="post" action="/app/finances/services/{{ s.id }}/update" class="fin-service-edit">
-                      <div class="fin-grid-3">
+                      <div class="fin-grid-4">
                         <div>
                           <label class="label">Servicio</label>
                           <input class="input" type="text" name="name" value="{{ s.name }}" required>
@@ -285,6 +308,11 @@
                         <div>
                           <label class="label">Precio base</label>
                           <input class="input" type="number" step="0.01" min="0" name="base_price" value="{{ '%.2f'|format(s.base_price|float) }}" required>
+                        </div>
+
+                        <div>
+                          <label class="label">Costo base estimado</label>
+                          <input class="input" type="number" step="0.01" min="0" name="base_cost" value="{{ '%.2f'|format((s.base_cost or 0)|float) }}">
                         </div>
                       </div>
 
@@ -318,7 +346,7 @@
                 </tr>
               {% else %}
                 <tr>
-                  <td colspan="5">No hay servicios registrados.</td>
+                  <td colspan="6">No hay servicios registrados.</td>
                 </tr>
               {% endfor %}
             </tbody>
@@ -332,7 +360,7 @@
     <section class="fin-card">
       <div class="fin-head">
         <div class="fin-title">Cobros recientes del mes</div>
-        <div class="fin-sub">Vista resumida de caja clínica para seguimiento operativo.</div>
+        <div class="fin-sub">Ahora cada cobro también muestra inversión real y ganancia neta.</div>
       </div>
 
       <div class="fin-body">
@@ -345,7 +373,9 @@
                 <th>Servicio / detalle</th>
                 <th>Profesional</th>
                 <th>Método</th>
-                <th>Total</th>
+                <th>Ingreso</th>
+                <th>Egreso</th>
+                <th>Ganancia</th>
                 <th>Estado</th>
                 <th>Cambiar</th>
               </tr>
@@ -368,7 +398,9 @@
                   </td>
                   <td>{{ c.doctor.name if c.doctor else "—" }}</td>
                   <td>{{ c.payment_method|capitalize }}</td>
-                  <td>${{ '%.2f'|format(c.total|float) }}</td>
+                  <td><span class="fin-money-neutral">${{ '%.2f'|format(c.total|float) }}</span></td>
+                  <td><span class="fin-money-expense">${{ '%.2f'|format(c.display_expense_amount|float) }}</span></td>
+                  <td><span class="fin-money-positive">${{ '%.2f'|format(c.display_profit|float) }}</span></td>
                   <td>
                     {% if c.payment_status == 'pagado' %}
                       <span class="fin-pill pill-green">Pagado</span>
@@ -391,7 +423,7 @@
                 </tr>
               {% else %}
                 <tr>
-                  <td colspan="8">No hay cobros registrados para este filtro.</td>
+                  <td colspan="10">No hay cobros registrados para este filtro.</td>
                 </tr>
               {% endfor %}
             </tbody>
@@ -403,7 +435,7 @@
     <section class="fin-card">
       <div class="fin-head">
         <div class="fin-title">Rankings del mes</div>
-        <div class="fin-sub">Solo consideran cobros pagados y agrupan servicios equivalentes aunque cambie la ortografía.</div>
+        <div class="fin-sub">Se calculan solo con cobros pagados. En servicios verás ingreso, egreso y ganancia por procedimiento.</div>
       </div>
 
       <div class="fin-body">
@@ -421,12 +453,19 @@
 
         <div style="height:18px;"></div>
 
-        <div class="fin-title" style="font-size:15px; margin-bottom:10px;">Por servicio</div>
+        <div class="fin-title" style="font-size:15px; margin-bottom:10px;">Por procedimiento</div>
         <div class="fin-rank">
-          {% for name, amount in ranking_services[:8] %}
-            <div class="fin-rank-item">
-              <div class="fin-rank-name">{{ name }}</div>
-              <div class="fin-rank-value">${{ '%.2f'|format(amount) }}</div>
+          {% for name, stats in ranking_services[:8] %}
+            <div class="fin-rank-item" style="align-items:flex-start;">
+              <div>
+                <div class="fin-rank-name">{{ name }}</div>
+                <div class="fin-rank-meta">
+                  Ingresos: ${{ '%.2f'|format(stats.income) }} ·
+                  Egresos: ${{ '%.2f'|format(stats.expense) }} ·
+                  Registros: {{ stats.count }}
+                </div>
+              </div>
+              <div class="fin-rank-value">${{ '%.2f'|format(stats.profit) }}</div>
             </div>
           {% else %}
             <div class="empty">Aún no hay servicios con cobros pagados.</div>
@@ -442,8 +481,9 @@
   const serviceSelect = document.getElementById("charge-service-select");
   const descriptionInput = document.getElementById("charge-description");
   const subtotalInput = document.getElementById("charge-subtotal");
+  const expenseInput = document.getElementById("charge-expense");
 
-  if (!serviceSelect || !descriptionInput || !subtotalInput) return;
+  if (!serviceSelect || !descriptionInput || !subtotalInput || !expenseInput) return;
 
   function markManual(field) {
     field.dataset.autofill = "0";
@@ -457,10 +497,15 @@
     markManual(subtotalInput);
   });
 
+  expenseInput.addEventListener("input", function () {
+    markManual(expenseInput);
+  });
+
   serviceSelect.addEventListener("change", function () {
     const option = serviceSelect.options[serviceSelect.selectedIndex];
     const serviceName = option ? (option.dataset.name || "") : "";
     const servicePrice = option ? (option.dataset.price || "") : "";
+    const serviceCost = option ? (option.dataset.cost || "") : "";
 
     const canFillDescription =
       !descriptionInput.value.trim() || descriptionInput.dataset.autofill === "1";
@@ -469,6 +514,11 @@
       !subtotalInput.value.trim() ||
       subtotalInput.dataset.autofill === "1" ||
       Number(subtotalInput.value || 0) === 0;
+
+    const canFillExpense =
+      !expenseInput.value.trim() ||
+      expenseInput.dataset.autofill === "1" ||
+      Number(expenseInput.value || 0) === 0;
 
     if (serviceName && canFillDescription) {
       descriptionInput.value = serviceName;
@@ -480,12 +530,21 @@
       subtotalInput.dataset.autofill = "1";
     }
 
+    if (serviceCost && canFillExpense) {
+      expenseInput.value = serviceCost;
+      expenseInput.dataset.autofill = "1";
+    }
+
     if (!serviceName && descriptionInput.dataset.autofill === "1") {
       descriptionInput.value = "";
     }
 
     if (!servicePrice && subtotalInput.dataset.autofill === "1") {
       subtotalInput.value = "";
+    }
+
+    if (!serviceCost && expenseInput.dataset.autofill === "1") {
+      expenseInput.value = "";
     }
   });
 })();
