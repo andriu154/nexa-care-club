@@ -7,7 +7,7 @@ import unicodedata
 import json
 
 import pandas as pd
-from fastapi import APIRouter, Depends, Request, HTTPException
+from fastapi import APIRouter, Depends, Request, HTTPException, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import inspect, text
@@ -489,6 +489,7 @@ def _load_cie10_data():
                 if not code_raw or not desc_raw:
                     continue
 
+                    # unreachable in original, kept behavior simple
                 code = _normalize_cie_code(code_raw)
                 description = desc_raw
 
@@ -1051,6 +1052,8 @@ def ui_encounter(encounter_id: int, request: Request, db: Session = Depends(get_
     is_owner = (enc.doctor_id == current_doctor.id)
     can_edit_note = is_owner and editable_window
 
+    followup_success = (request.query_params.get("followup") or "").strip().lower() == "ok"
+
     return templates.TemplateResponse(
         "encounter.html",
         {
@@ -1065,8 +1068,86 @@ def ui_encounter(encounter_id: int, request: Request, db: Session = Depends(get_
             "is_owner": is_owner,
             "can_edit_note": can_edit_note,
             "pdf_url": f"/encounters/{enc.id}/pdf",
+            "followup_success": followup_success,
+            "followup_defaults": {
+                "date": datetime.now(APP_TZ).date().isoformat(),
+                "time": "09:00",
+                "duration_minutes": 30,
+                "reason": f"Control subsecuente - {patient.full_name}" if patient else "Control subsecuente",
+                "notes": "",
+            }
         },
     )
+
+
+@router.post("/encounters/{encounter_id}/schedule-followup")
+def ui_schedule_followup(
+    encounter_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    followup_date: str = Form(...),
+    followup_time: str = Form(...),
+    duration_minutes: str = Form("30"),
+    reason: str = Form(""),
+    notes: str = Form(""),
+):
+    current_doctor = _require_login(request, db)
+    if not current_doctor:
+        return _redirect_login()
+
+    enc = db.query(Encounter).filter(Encounter.id == encounter_id).first()
+    if not enc:
+        raise HTTPException(status_code=404, detail="Consulta no encontrada")
+
+    if enc.doctor_id != current_doctor.id:
+        raise HTTPException(status_code=403, detail="No autorizado")
+
+    if not enc.ended_at:
+        return RedirectResponse(url=f"/app/encounters/{enc.id}", status_code=302)
+
+    patient = db.query(Patient).filter(Patient.id == enc.patient_id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Paciente no encontrado")
+
+    raw_date = (followup_date or "").strip()
+    raw_time = (followup_time or "").strip()
+    raw_reason = (reason or "").strip()
+    raw_notes = (notes or "").strip()
+
+    if not raw_date or not raw_time:
+        return RedirectResponse(url=f"/app/encounters/{enc.id}", status_code=302)
+
+    try:
+        start_dt = datetime.strptime(f"{raw_date} {raw_time}", "%Y-%m-%d %H:%M")
+    except Exception:
+        return RedirectResponse(url=f"/app/encounters/{enc.id}", status_code=302)
+
+    try:
+        duration_value = int((duration_minutes or "30").strip())
+    except Exception:
+        duration_value = 30
+
+    if duration_value <= 0:
+        duration_value = 30
+
+    end_dt = start_dt + timedelta(minutes=duration_value)
+
+    new_appt = Appointment(
+        doctor_id=current_doctor.id,
+        patient_id=patient.id,
+        start_at=start_dt,
+        end_at=end_dt,
+        status="scheduled",
+        reason=raw_reason or f"Control subsecuente - {patient.full_name}",
+        notes=raw_notes or None,
+        encounter_id=None,
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+    )
+    db.add(new_appt)
+    db.commit()
+
+    return RedirectResponse(url=f"/app/encounters/{enc.id}?followup=ok", status_code=302)
 
 
 @router.post("/encounters/{encounter_id}/save-note")

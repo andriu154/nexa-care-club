@@ -24,7 +24,7 @@ from ..models import (
 )
 from .auth import get_logged_doctor, is_admin
 
-router = APIRouter(prefix="/app/finances", tags=["Finances UI"])
+router = APIRouter(prefix="/app", tags=["Finances UI"])
 templates = Jinja2Templates(directory="app/templates")
 
 APP_TZ = ZoneInfo(os.getenv("APP_TIMEZONE", "America/Guayaquil"))
@@ -167,25 +167,11 @@ def _charge_service_label(charge: Charge, catalog_services: list[ServiceCatalog]
 
 
 def _allowed_units():
-    return [
-        "unidad",
-        "ml",
-        "vial",
-        "ampolla",
-        "caja",
-        "jeringa",
-        "par",
-    ]
+    return ["unidad", "ml", "vial", "ampolla", "caja", "jeringa", "par"]
 
 
 def _allowed_movement_types():
-    return {
-        "purchase",
-        "manual_in",
-        "manual_out",
-        "procedure_use",
-        "correction",
-    }
+    return {"purchase", "manual_in", "manual_out", "procedure_use", "correction"}
 
 
 def _build_inventory_cost_for_service(service: ServiceCatalog | None) -> float:
@@ -211,11 +197,7 @@ def _consume_inventory_for_charge(
     actor_doctor: Doctor | None,
 ):
     if not service:
-        return {
-            "used_items": [],
-            "estimated_cost": 0.0,
-            "warnings": [],
-        }
+        return {"used_items": [], "estimated_cost": 0.0, "warnings": []}
 
     used_items = []
     warnings = []
@@ -275,34 +257,14 @@ def _consume_inventory_for_charge(
     }
 
 
-def _render_finances(
-    request: Request,
-    current_doctor: Doctor,
-    db: Session,
-    error: str | None = None,
-    success: str | None = None,
-):
-    if not is_admin(current_doctor):
-        return _redirect_app()
-
-    month = (request.query_params.get("month") or "").strip()
-    selected_doctor_id = _parse_int(request.query_params.get("doctor_id"))
-    selected_service_id = _parse_int(request.query_params.get("service_id"))
-    selected_status = (request.query_params.get("payment_status") or "").strip().lower()
-    selected_method = (request.query_params.get("payment_method") or "").strip().lower()
-    preselected_patient_id = _parse_int(request.query_params.get("patient_id"))
-    preselected_encounter_id = _parse_int(request.query_params.get("encounter_id"))
-
-    month_start, month_end, selected_month = _month_bounds(month)
-
+def _common_admin_payload(request: Request, db: Session):
     services = (
         db.query(ServiceCatalog)
-        .options(
-            joinedload(ServiceCatalog.supply_links).joinedload(ServiceSupply.item)
-        )
+        .options(joinedload(ServiceCatalog.supply_links).joinedload(ServiceSupply.item))
         .order_by(ServiceCatalog.is_active.desc(), ServiceCatalog.name.asc())
         .all()
     )
+
     doctors = db.query(Doctor).filter(Doctor.is_active == True).order_by(Doctor.name.asc()).all()
     patients = db.query(Patient).order_by(Patient.full_name.asc()).all()
 
@@ -331,6 +293,38 @@ def _render_finances(
         item.is_low_stock = threshold > 0 and current_stock <= threshold
         if item.is_low_stock:
             low_stock_items.append(item)
+
+    return {
+        "services": services,
+        "doctors": doctors,
+        "patients": patients,
+        "inventory_items": inventory_items,
+        "inventory_movements": inventory_movements,
+        "low_stock_items": low_stock_items,
+    }
+
+
+def _render_finances(
+    request: Request,
+    current_doctor: Doctor,
+    db: Session,
+    error: str | None = None,
+    success: str | None = None,
+):
+    if not is_admin(current_doctor):
+        return _redirect_app()
+
+    month = (request.query_params.get("month") or "").strip()
+    selected_doctor_id = _parse_int(request.query_params.get("doctor_id"))
+    selected_service_id = _parse_int(request.query_params.get("service_id"))
+    selected_status = (request.query_params.get("payment_status") or "").strip().lower()
+    selected_method = (request.query_params.get("payment_method") or "").strip().lower()
+    preselected_patient_id = _parse_int(request.query_params.get("patient_id"))
+    preselected_encounter_id = _parse_int(request.query_params.get("encounter_id"))
+
+    month_start, month_end, selected_month = _month_bounds(month)
+    common = _common_admin_payload(request, db)
+    services = common["services"]
 
     charges_query = (
         db.query(Charge)
@@ -391,24 +385,17 @@ def _render_finances(
         doctor_ranking[doctor_name] += _to_float(c.total)
 
         service_name = c.display_service_label or "Sin servicio"
-        service_stats = service_ranking.setdefault(
+        stats = service_ranking.setdefault(
             service_name,
-            {
-                "income": 0.0,
-                "expense": 0.0,
-                "profit": 0.0,
-                "count": 0,
-            },
+            {"income": 0.0, "expense": 0.0, "profit": 0.0, "count": 0},
         )
-        service_stats["income"] += _to_float(c.total)
-        service_stats["expense"] += _to_float(c.expense_amount)
-        service_stats["profit"] += round(_to_float(c.total) - _to_float(c.expense_amount), 2)
-        service_stats["count"] += 1
+        stats["income"] += _to_float(c.total)
+        stats["expense"] += _to_float(c.expense_amount)
+        stats["profit"] += round(_to_float(c.total) - _to_float(c.expense_amount), 2)
+        stats["count"] += 1
 
     ranking_doctors = sorted(doctor_ranking.items(), key=lambda x: x[1], reverse=True)
     ranking_services = sorted(service_ranking.items(), key=lambda x: x[1]["profit"], reverse=True)
-
-    recent_charges = month_charges[:30]
 
     selected_patient = None
     selected_encounter = None
@@ -457,28 +444,58 @@ def _render_finances(
                 "paid_expense_total": round(paid_expense_total, 2),
                 "net_profit_total": round(net_profit_total, 2),
                 "charge_count": len(month_charges),
-                "inventory_total_items": len(inventory_items),
-                "inventory_low_stock_count": len(low_stock_items),
             },
-            "recent_charges": recent_charges,
+            "recent_charges": month_charges[:30],
             "ranking_doctors": ranking_doctors,
             "ranking_services": ranking_services,
-            "patients": patients,
-            "doctors": doctors,
+            "patients": common["patients"],
+            "doctors": common["doctors"],
             "services": services,
-            "inventory_items": inventory_items,
-            "inventory_movements": inventory_movements,
-            "low_stock_items": low_stock_items,
             "form_defaults": form_defaults,
             "selected_patient": selected_patient,
             "selected_encounter": selected_encounter,
-            "allowed_units": _allowed_units(),
         },
     )
 
 
-@router.get("", response_class=HTMLResponse)
-@router.get("/", response_class=HTMLResponse)
+def _render_inventory(
+    request: Request,
+    current_doctor: Doctor,
+    db: Session,
+    error: str | None = None,
+    success: str | None = None,
+):
+    if not is_admin(current_doctor):
+        return _redirect_app()
+
+    common = _common_admin_payload(request, db)
+
+    return templates.TemplateResponse(
+        "inventory.html",
+        {
+            "request": request,
+            "current_doctor": current_doctor,
+            "error": error,
+            "success": success,
+            "services": common["services"],
+            "inventory_items": common["inventory_items"],
+            "inventory_movements": common["inventory_movements"],
+            "low_stock_items": common["low_stock_items"],
+            "allowed_units": _allowed_units(),
+            "summary": {
+                "inventory_total_items": len(common["inventory_items"]),
+                "inventory_low_stock_count": len(common["low_stock_items"]),
+                "inventory_total_stock_value": round(
+                    sum(_to_float(x.current_stock) * _to_float(x.average_cost) for x in common["inventory_items"]), 2
+                ),
+                "active_services": sum(1 for s in common["services"] if s.is_active),
+            },
+        },
+    )
+
+
+@router.get("/finances", response_class=HTMLResponse)
+@router.get("/finances/", response_class=HTMLResponse)
 def finances_page(request: Request, db: Session = Depends(get_db)):
     current_doctor = get_logged_doctor(request, db)
     if not current_doctor:
@@ -486,7 +503,16 @@ def finances_page(request: Request, db: Session = Depends(get_db)):
     return _render_finances(request, current_doctor, db)
 
 
-@router.post("/services/create")
+@router.get("/inventory", response_class=HTMLResponse)
+@router.get("/inventory/", response_class=HTMLResponse)
+def inventory_page(request: Request, db: Session = Depends(get_db)):
+    current_doctor = get_logged_doctor(request, db)
+    if not current_doctor:
+        return _redirect_login()
+    return _render_inventory(request, current_doctor, db)
+
+
+@router.post("/finances/services/create")
 def create_service(
     request: Request,
     db: Session = Depends(get_db),
@@ -508,10 +534,8 @@ def create_service(
 
     if not name:
         return _render_finances(request, current_doctor, db, error="El nombre del servicio es obligatorio.")
-
     if price < 0:
         return _render_finances(request, current_doctor, db, error="El precio no puede ser negativo.")
-
     if cost < 0:
         return _render_finances(request, current_doctor, db, error="El costo base no puede ser negativo.")
 
@@ -540,7 +564,7 @@ def create_service(
     return _render_finances(request, current_doctor, db, success=f"Servicio creado: {name}")
 
 
-@router.post("/services/{service_id}/update")
+@router.post("/finances/services/{service_id}/update")
 def update_service(
     service_id: int,
     request: Request,
@@ -559,7 +583,7 @@ def update_service(
 
     service = db.query(ServiceCatalog).filter(ServiceCatalog.id == service_id).first()
     if not service:
-        return _render_finances(request, current_doctor, db, error="Servicio no encontrado.")
+        return _render_inventory(request, current_doctor, db, error="Servicio no encontrado.")
 
     name = (name or "").strip()
     category = (category or "Consulta").strip()
@@ -568,13 +592,11 @@ def update_service(
     active = bool(is_active)
 
     if not name:
-        return _render_finances(request, current_doctor, db, error="El nombre del servicio es obligatorio.")
-
+        return _render_inventory(request, current_doctor, db, error="El nombre del servicio es obligatorio.")
     if price < 0:
-        return _render_finances(request, current_doctor, db, error="El precio no puede ser negativo.")
-
+        return _render_inventory(request, current_doctor, db, error="El precio no puede ser negativo.")
     if cost < 0:
-        return _render_finances(request, current_doctor, db, error="El costo base no puede ser negativo.")
+        return _render_inventory(request, current_doctor, db, error="El costo base no puede ser negativo.")
 
     duplicate = (
         db.query(ServiceCatalog)
@@ -583,7 +605,7 @@ def update_service(
         .first()
     )
     if duplicate:
-        return _render_finances(request, current_doctor, db, error="Ya existe otro servicio con ese nombre.")
+        return _render_inventory(request, current_doctor, db, error="Ya existe otro servicio con ese nombre.")
 
     service.name = name
     service.category = category
@@ -593,16 +615,11 @@ def update_service(
     service.updated_at = datetime.utcnow()
     db.commit()
 
-    estado = "activo" if active else "inactivo"
-    return _render_finances(request, current_doctor, db, success=f"Servicio actualizado: {name} ({estado}).")
+    return _render_inventory(request, current_doctor, db, success=f"Servicio actualizado: {name}")
 
 
-@router.post("/services/{service_id}/delete")
-def delete_service(
-    service_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-):
+@router.post("/finances/services/{service_id}/delete")
+def delete_service(service_id: int, request: Request, db: Session = Depends(get_db)):
     current_doctor = get_logged_doctor(request, db)
     if not current_doctor:
         return _redirect_login()
@@ -611,11 +628,11 @@ def delete_service(
 
     service = db.query(ServiceCatalog).filter(ServiceCatalog.id == service_id).first()
     if not service:
-        return _render_finances(request, current_doctor, db, error="Servicio no encontrado.")
+        return _render_inventory(request, current_doctor, db, error="Servicio no encontrado.")
 
     linked_charges = db.query(Charge).filter(Charge.service_id == service_id).count()
     if linked_charges > 0:
-        return _render_finances(
+        return _render_inventory(
             request,
             current_doctor,
             db,
@@ -626,7 +643,7 @@ def delete_service(
     db.delete(service)
     db.commit()
 
-    return _render_finances(request, current_doctor, db, success=f"Servicio eliminado: {name}")
+    return _render_inventory(request, current_doctor, db, success=f"Servicio eliminado: {name}")
 
 
 @router.post("/inventory/create")
@@ -663,18 +680,16 @@ def create_inventory_item(
     avg_cost = _parse_money(average_cost)
 
     if not name:
-        return _render_finances(request, current_doctor, db, error="El nombre del insumo es obligatorio.")
-
+        return _render_inventory(request, current_doctor, db, error="El nombre del insumo es obligatorio.")
     if unit not in _allowed_units():
         unit = "unidad"
-
     if stock < 0 or minimum < 0 or reorder < 0 or avg_cost < 0:
-        return _render_finances(request, current_doctor, db, error="Los valores del inventario no pueden ser negativos.")
+        return _render_inventory(request, current_doctor, db, error="Los valores del inventario no pueden ser negativos.")
 
     existing = db.query(InventoryItem).filter(InventoryItem.name == name).first()
     if existing:
-        existing.category = category
-        existing.presentation = presentation
+        existing.category = category or None
+        existing.presentation = presentation or None
         existing.unit = unit
         existing.current_stock = stock
         existing.minimum_stock = minimum
@@ -685,7 +700,7 @@ def create_inventory_item(
         existing.is_active = True
         existing.updated_at = datetime.utcnow()
         db.commit()
-        return _render_finances(request, current_doctor, db, success=f"Insumo actualizado: {name}")
+        return _render_inventory(request, current_doctor, db, success=f"Insumo actualizado: {name}")
 
     item = InventoryItem(
         name=name,
@@ -705,7 +720,7 @@ def create_inventory_item(
     db.add(item)
     db.commit()
 
-    return _render_finances(request, current_doctor, db, success=f"Insumo creado: {name}")
+    return _render_inventory(request, current_doctor, db, success=f"Insumo creado: {name}")
 
 
 @router.post("/inventory/{item_id}/update")
@@ -733,7 +748,7 @@ def update_inventory_item(
 
     item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
     if not item:
-        return _render_finances(request, current_doctor, db, error="Insumo no encontrado.")
+        return _render_inventory(request, current_doctor, db, error="Insumo no encontrado.")
 
     name = (name or "").strip()
     category = (category or "").strip()
@@ -748,7 +763,7 @@ def update_inventory_item(
     avg_cost = _parse_money(average_cost)
 
     if not name:
-        return _render_finances(request, current_doctor, db, error="El nombre del insumo es obligatorio.")
+        return _render_inventory(request, current_doctor, db, error="El nombre del insumo es obligatorio.")
 
     duplicate = (
         db.query(InventoryItem)
@@ -757,13 +772,13 @@ def update_inventory_item(
         .first()
     )
     if duplicate:
-        return _render_finances(request, current_doctor, db, error="Ya existe otro insumo con ese nombre.")
+        return _render_inventory(request, current_doctor, db, error="Ya existe otro insumo con ese nombre.")
 
     if unit not in _allowed_units():
         unit = "unidad"
 
     if stock < 0 or minimum < 0 or reorder < 0 or avg_cost < 0:
-        return _render_finances(request, current_doctor, db, error="Los valores del inventario no pueden ser negativos.")
+        return _render_inventory(request, current_doctor, db, error="Los valores del inventario no pueden ser negativos.")
 
     item.name = name
     item.category = category or None
@@ -780,7 +795,7 @@ def update_inventory_item(
 
     db.commit()
 
-    return _render_finances(request, current_doctor, db, success=f"Insumo actualizado: {name}")
+    return _render_inventory(request, current_doctor, db, success=f"Insumo actualizado: {name}")
 
 
 @router.post("/inventory/{item_id}/movement")
@@ -802,7 +817,7 @@ def create_inventory_movement(
 
     item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
     if not item:
-        return _render_finances(request, current_doctor, db, error="Insumo no encontrado.")
+        return _render_inventory(request, current_doctor, db, error="Insumo no encontrado.")
 
     movement_type = (movement_type or "").strip().lower()
     qty = _parse_money(quantity)
@@ -811,13 +826,11 @@ def create_inventory_movement(
     notes = (notes or "").strip()
 
     if movement_type not in _allowed_movement_types():
-        return _render_finances(request, current_doctor, db, error="Tipo de movimiento inválido.")
-
+        return _render_inventory(request, current_doctor, db, error="Tipo de movimiento inválido.")
     if qty <= 0:
-        return _render_finances(request, current_doctor, db, error="La cantidad debe ser mayor a 0.")
-
+        return _render_inventory(request, current_doctor, db, error="La cantidad debe ser mayor a 0.")
     if unit_cost_value < 0:
-        return _render_finances(request, current_doctor, db, error="El costo unitario no puede ser negativo.")
+        return _render_inventory(request, current_doctor, db, error="El costo unitario no puede ser negativo.")
 
     current_stock = _to_float(item.current_stock)
 
@@ -859,10 +872,10 @@ def create_inventory_movement(
     if new_stock < 0:
         msg += " · Atención: el stock quedó negativo."
 
-    return _render_finances(request, current_doctor, db, success=msg)
+    return _render_inventory(request, current_doctor, db, success=msg)
 
 
-@router.post("/services/{service_id}/supplies/add")
+@router.post("/finances/services/{service_id}/supplies/add")
 def add_service_supply(
     service_id: int,
     request: Request,
@@ -885,17 +898,17 @@ def add_service_supply(
         .first()
     )
     if not service:
-        return _render_finances(request, current_doctor, db, error="Servicio no encontrado.")
+        return _render_inventory(request, current_doctor, db, error="Servicio no encontrado.")
 
     item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
     if not item:
-        return _render_finances(request, current_doctor, db, error="Insumo no encontrado.")
+        return _render_inventory(request, current_doctor, db, error="Insumo no encontrado.")
 
     qty = _parse_money(quantity)
     notes = (notes or "").strip()
 
     if qty <= 0:
-        return _render_finances(request, current_doctor, db, error="La cantidad del insumo debe ser mayor a 0.")
+        return _render_inventory(request, current_doctor, db, error="La cantidad del insumo debe ser mayor a 0.")
 
     existing = (
         db.query(ServiceSupply)
@@ -920,12 +933,20 @@ def add_service_supply(
         )
         db.add(link)
 
+    db.flush()
+    service = (
+        db.query(ServiceCatalog)
+        .options(joinedload(ServiceCatalog.supply_links).joinedload(ServiceSupply.item))
+        .filter(ServiceCatalog.id == service.id)
+        .first()
+    )
+
     calculated_cost = _build_inventory_cost_for_service(service)
     service.base_cost = calculated_cost
     service.updated_at = datetime.utcnow()
 
     db.commit()
-    return _render_finances(
+    return _render_inventory(
         request,
         current_doctor,
         db,
@@ -933,7 +954,7 @@ def add_service_supply(
     )
 
 
-@router.post("/services/{service_id}/supplies/{link_id}/delete")
+@router.post("/finances/services/{service_id}/supplies/{link_id}/delete")
 def delete_service_supply(
     service_id: int,
     link_id: int,
@@ -948,7 +969,7 @@ def delete_service_supply(
 
     service = db.query(ServiceCatalog).filter(ServiceCatalog.id == service_id).first()
     if not service:
-        return _render_finances(request, current_doctor, db, error="Servicio no encontrado.")
+        return _render_inventory(request, current_doctor, db, error="Servicio no encontrado.")
 
     link = (
         db.query(ServiceSupply)
@@ -957,17 +978,24 @@ def delete_service_supply(
         .first()
     )
     if not link:
-        return _render_finances(request, current_doctor, db, error="Vínculo de insumo no encontrado.")
+        return _render_inventory(request, current_doctor, db, error="Vínculo de insumo no encontrado.")
 
     db.delete(link)
     db.flush()
+
+    service = (
+        db.query(ServiceCatalog)
+        .options(joinedload(ServiceCatalog.supply_links).joinedload(ServiceSupply.item))
+        .filter(ServiceCatalog.id == service_id)
+        .first()
+    )
 
     calculated_cost = _build_inventory_cost_for_service(service)
     service.base_cost = calculated_cost
     service.updated_at = datetime.utcnow()
 
     db.commit()
-    return _render_finances(
+    return _render_inventory(
         request,
         current_doctor,
         db,
@@ -975,7 +1003,7 @@ def delete_service_supply(
     )
 
 
-@router.post("/charges/create")
+@router.post("/finances/charges/create")
 def create_charge(
     request: Request,
     db: Session = Depends(get_db),
@@ -1025,10 +1053,8 @@ def create_charge(
 
     if subtotal_value <= 0:
         return _render_finances(request, current_doctor, db, error="El subtotal debe ser mayor a 0.")
-
     if discount_value < 0:
         return _render_finances(request, current_doctor, db, error="El descuento no puede ser negativo.")
-
     if expense_value < 0:
         return _render_finances(request, current_doctor, db, error="La inversión no puede ser negativa.")
 
@@ -1045,7 +1071,6 @@ def create_charge(
     description = (description or "").strip()
     if not description and service:
         description = service.name
-
     if not description:
         description = "Cobro clínico"
 
@@ -1113,15 +1138,10 @@ def create_charge(
     if inventory_result["warnings"]:
         msg += " · " + " ".join(inventory_result["warnings"])
 
-    return _render_finances(
-        request,
-        current_doctor,
-        db,
-        success=msg,
-    )
+    return _render_finances(request, current_doctor, db, success=msg)
 
 
-@router.post("/charges/{charge_id}/status")
+@router.post("/finances/charges/{charge_id}/status")
 def update_charge_status(
     charge_id: int,
     request: Request,

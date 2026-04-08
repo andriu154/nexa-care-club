@@ -87,6 +87,7 @@
   .wiz-section-body{padding:18px;display:grid;gap:14px;overflow:visible;}
   .wiz-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
   .wiz-grid-3{display:grid;grid-template-columns:repeat(3, 1fr);gap:14px;}
+  .wiz-grid-4{display:grid;grid-template-columns:repeat(4, 1fr);gap:12px;}
   .wiz-grid-5{display:grid;grid-template-columns:repeat(5, 1fr);gap:12px;}
   .wiz-grid-6{display:grid;grid-template-columns:repeat(6, 1fr);gap:12px;}
   .wiz-field{display:grid;gap:8px;position:relative;}
@@ -108,6 +109,14 @@
     border:1px solid #dbe6f3;
     border-radius:999px;
     padding:8px 12px;
+  }
+  .wiz-alert-ok{
+    border:1px solid #bdeccf;
+    background:#ecfff5;
+    color:#087443;
+    border-radius:16px;
+    padding:14px 16px;
+    font-weight:700;
   }
   .dx-list{display:grid;gap:10px;overflow:visible;}
   .dx-row{
@@ -226,9 +235,26 @@
   .female-only{display:none;}
   .female-only.show{display:grid;}
   .side-sticky{position:sticky;top:20px;}
+  .followup-box{
+    border:1px solid #dbe6f3;
+    border-radius:18px;
+    background:#fff;
+    padding:16px;
+    display:grid;
+    gap:12px;
+  }
+  .followup-title{
+    font-size:16px;
+    font-weight:800;
+    color:#163c7a;
+  }
+  .followup-sub{
+    font-size:13px;
+    color:#6b7280;
+  }
   @media (max-width: 1200px){.wiz-layout{grid-template-columns:1fr;}}
   @media (max-width: 900px){
-    .wiz-grid-2,.wiz-grid-3,.wiz-grid-5,.wiz-grid-6,.dx-row,.rx-head,.rx-row{grid-template-columns:1fr;}
+    .wiz-grid-2,.wiz-grid-3,.wiz-grid-4,.wiz-grid-5,.wiz-grid-6,.dx-row,.rx-head,.rx-row{grid-template-columns:1fr;}
   }
 </style>
 
@@ -277,9 +303,15 @@
       </div>
     </div>
 
-    {% if not can_edit_note %}
-      <div class="wiz-body">
-        <div class="empty">
+    <div class="wiz-body">
+      {% if followup_success %}
+        <div class="wiz-alert-ok">
+          Cita subsecuente agendada correctamente.
+        </div>
+      {% endif %}
+
+      {% if not can_edit_note %}
+        <div class="empty" style="margin-bottom:16px;">
           <div class="empty-title">
             {% if not is_owner %}
               Esta atención fue registrada por otro profesional
@@ -295,25 +327,74 @@
             {% endif %}
           </div>
         </div>
-      </div>
-    {% endif %}
+      {% endif %}
 
-    <div class="wiz-progress" id="stepBar">
-      <button type="button" class="wiz-step-link active" data-step="0">1. Signos vitales</button>
-      <button type="button" class="wiz-step-link" data-step="1">2. Antecedentes</button>
-      <button type="button" class="wiz-step-link" data-step="2">3. Motivo / HPI</button>
-      <button type="button" class="wiz-step-link" data-step="3">4. Examen físico</button>
-      <button type="button" class="wiz-step-link" data-step="4">5. Diagnóstico</button>
-      <button type="button" class="wiz-step-link" data-step="5">6. Exámenes complementarios</button>
-      <button type="button" class="wiz-step-link" data-step="6">7. Plan y seguimiento</button>
-    </div>
+      {% if enc.ended_at and is_owner %}
+        <div class="followup-box" style="margin-bottom:18px;">
+          <div>
+            <div class="followup-title">Agendar cita subsecuente</div>
+            <div class="followup-sub">
+              Crea el próximo control del paciente directamente desde esta atención ya cerrada.
+            </div>
+          </div>
 
-    <div class="wiz-body">
+          <form method="post" action="/app/encounters/{{ enc.id }}/schedule-followup" class="wiz-form">
+            <div class="wiz-grid-4">
+              <div class="wiz-field">
+                <label class="wiz-label">Fecha</label>
+                <input class="input" type="date" name="followup_date" value="{{ followup_defaults.date }}" required>
+              </div>
+
+              <div class="wiz-field">
+                <label class="wiz-label">Hora</label>
+                <input class="input" type="time" name="followup_time" value="{{ followup_defaults.time }}" required>
+              </div>
+
+              <div class="wiz-field">
+                <label class="wiz-label">Duración (min)</label>
+                <input class="input" type="number" min="5" step="5" name="duration_minutes" value="{{ followup_defaults.duration_minutes }}" required>
+              </div>
+
+              <div class="wiz-field">
+                <label class="wiz-label">Paciente</label>
+                <input class="input" type="text" value="{{ patient.full_name }}" disabled>
+              </div>
+            </div>
+
+            <div class="wiz-grid-2">
+              <div class="wiz-field">
+                <label class="wiz-label">Motivo</label>
+                <input class="input" type="text" name="reason" value="{{ followup_defaults.reason }}" required>
+              </div>
+
+              <div class="wiz-field">
+                <label class="wiz-label">Notas</label>
+                <input class="input" type="text" name="notes" value="{{ followup_defaults.notes }}">
+              </div>
+            </div>
+
+            <div style="display:flex; justify-content:flex-end;">
+              <button class="btn btn-primary" type="submit">Agendar subsecuente</button>
+            </div>
+          </form>
+        </div>
+      {% endif %}
+
       <form method="post" action="/app/encounters/{{ enc.id }}/save-note" id="noteWizardForm">
         {% set dis = "" if can_edit_note else "disabled" %}
 
         <input type="hidden" name="assessment_dx" id="assessmentDxHidden" value="{{ note.assessment_dx if note and note.assessment_dx else '' }}">
         <input type="hidden" name="prescription_items_json" id="prescriptionItemsHidden" value="{{ enc.prescription_json if enc and enc.prescription_json else '[]' }}">
+
+        <div class="wiz-progress" id="stepBar">
+          <button type="button" class="wiz-step-link active" data-step="0">1. Signos vitales</button>
+          <button type="button" class="wiz-step-link" data-step="1">2. Antecedentes</button>
+          <button type="button" class="wiz-step-link" data-step="2">3. Motivo / HPI</button>
+          <button type="button" class="wiz-step-link" data-step="3">4. Examen físico</button>
+          <button type="button" class="wiz-step-link" data-step="4">5. Diagnóstico</button>
+          <button type="button" class="wiz-step-link" data-step="5">6. Exámenes complementarios</button>
+          <button type="button" class="wiz-step-link" data-step="6">7. Plan y seguimiento</button>
+        </div>
 
         <section class="wiz-page active" data-page="0">
           <div class="wiz-section">
@@ -932,7 +1013,7 @@
     if (full.includes("metoclopramida")) {
       return "1 tableta cada 8 horas por 2 a 3 días si náusea";
     }
-    if (full.includes("ondansetron") || full.includes("ondansetron") || full.includes("ondansetron") || full.includes("ondansetron")) {
+    if (full.includes("ondansetron")) {
       return "1 tableta cada 12 horas por 2 días si náusea o vómito";
     }
 
