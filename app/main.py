@@ -219,6 +219,78 @@ def ensure_sqlite_schema():
                         conn.execute(text(f"ALTER TABLE charges ADD COLUMN {col_name} {col_type};"))
                         print(f"✅ Migración SQLite: charges.{col_name} agregado")
 
+            tbli = conn.execute(
+                text("SELECT name FROM sqlite_master WHERE type='table' AND name='inventory_items';")
+            ).fetchone()
+            if tbli:
+                cols = conn.execute(text("PRAGMA table_info(inventory_items);")).fetchall()
+                col_names = {c[1] for c in cols}
+
+                inventory_needed = {
+                    "name": "VARCHAR",
+                    "category": "VARCHAR",
+                    "presentation": "VARCHAR",
+                    "unit": "VARCHAR NOT NULL DEFAULT 'unidad'",
+                    "current_stock": "NUMERIC(12,2) NOT NULL DEFAULT 0",
+                    "minimum_stock": "NUMERIC(12,2) NOT NULL DEFAULT 0",
+                    "reorder_point": "NUMERIC(12,2) NOT NULL DEFAULT 0",
+                    "average_cost": "NUMERIC(12,2) NOT NULL DEFAULT 0",
+                    "supplier": "VARCHAR",
+                    "notes": "TEXT",
+                    "is_active": "BOOLEAN NOT NULL DEFAULT 1",
+                    "created_at": "DATETIME",
+                    "updated_at": "DATETIME",
+                }
+                for col_name, col_type in inventory_needed.items():
+                    if col_name not in col_names:
+                        conn.execute(text(f"ALTER TABLE inventory_items ADD COLUMN {col_name} {col_type};"))
+                        print(f"✅ Migración SQLite: inventory_items.{col_name} agregado")
+
+            tblm = conn.execute(
+                text("SELECT name FROM sqlite_master WHERE type='table' AND name='inventory_movements';")
+            ).fetchone()
+            if tblm:
+                cols = conn.execute(text("PRAGMA table_info(inventory_movements);")).fetchall()
+                col_names = {c[1] for c in cols}
+
+                movement_needed = {
+                    "item_id": "INTEGER",
+                    "charge_id": "INTEGER",
+                    "actor_doctor_id": "INTEGER",
+                    "movement_type": "VARCHAR NOT NULL DEFAULT 'adjustment'",
+                    "quantity": "NUMERIC(12,2) NOT NULL DEFAULT 0",
+                    "unit_cost": "NUMERIC(12,2) NOT NULL DEFAULT 0",
+                    "total_cost": "NUMERIC(12,2) NOT NULL DEFAULT 0",
+                    "reference": "VARCHAR",
+                    "notes": "TEXT",
+                    "created_at": "DATETIME",
+                }
+                for col_name, col_type in movement_needed.items():
+                    if col_name not in col_names:
+                        conn.execute(text(f"ALTER TABLE inventory_movements ADD COLUMN {col_name} {col_type};"))
+                        print(f"✅ Migración SQLite: inventory_movements.{col_name} agregado")
+
+            tblss = conn.execute(
+                text("SELECT name FROM sqlite_master WHERE type='table' AND name='service_supplies';")
+            ).fetchone()
+            if tblss:
+                cols = conn.execute(text("PRAGMA table_info(service_supplies);")).fetchall()
+                col_names = {c[1] for c in cols}
+
+                supply_needed = {
+                    "service_id": "INTEGER",
+                    "item_id": "INTEGER",
+                    "quantity": "NUMERIC(12,2) NOT NULL DEFAULT 0",
+                    "is_optional": "BOOLEAN NOT NULL DEFAULT 0",
+                    "notes": "TEXT",
+                    "created_at": "DATETIME",
+                    "updated_at": "DATETIME",
+                }
+                for col_name, col_type in supply_needed.items():
+                    if col_name not in col_names:
+                        conn.execute(text(f"ALTER TABLE service_supplies ADD COLUMN {col_name} {col_type};"))
+                        print(f"✅ Migración SQLite: service_supplies.{col_name} agregado")
+
     except Exception as e:
         print("⚠️ Error en migración SQLite:", repr(e))
 
@@ -340,6 +412,78 @@ def ensure_postgres_schema():
                 if not exists:
                     conn.execute(text(sql))
                     print(f"✅ Migración PostgreSQL: charges.{col_name} agregado")
+
+            inventory_columns = {
+                "name": "ALTER TABLE inventory_items ADD COLUMN name VARCHAR;",
+                "category": "ALTER TABLE inventory_items ADD COLUMN category VARCHAR;",
+                "presentation": "ALTER TABLE inventory_items ADD COLUMN presentation VARCHAR;",
+                "unit": "ALTER TABLE inventory_items ADD COLUMN unit VARCHAR NOT NULL DEFAULT 'unidad';",
+                "current_stock": "ALTER TABLE inventory_items ADD COLUMN current_stock NUMERIC(12,2) NOT NULL DEFAULT 0;",
+                "minimum_stock": "ALTER TABLE inventory_items ADD COLUMN minimum_stock NUMERIC(12,2) NOT NULL DEFAULT 0;",
+                "reorder_point": "ALTER TABLE inventory_items ADD COLUMN reorder_point NUMERIC(12,2) NOT NULL DEFAULT 0;",
+                "average_cost": "ALTER TABLE inventory_items ADD COLUMN average_cost NUMERIC(12,2) NOT NULL DEFAULT 0;",
+                "supplier": "ALTER TABLE inventory_items ADD COLUMN supplier VARCHAR;",
+                "notes": "ALTER TABLE inventory_items ADD COLUMN notes TEXT;",
+                "is_active": "ALTER TABLE inventory_items ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE;",
+                "created_at": "ALTER TABLE inventory_items ADD COLUMN created_at TIMESTAMP;",
+                "updated_at": "ALTER TABLE inventory_items ADD COLUMN updated_at TIMESTAMP;",
+            }
+
+            for col_name, sql in inventory_columns.items():
+                exists = conn.execute(text(f"""
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'inventory_items' AND column_name = '{col_name}'
+                    LIMIT 1
+                """)).fetchone()
+                if not exists:
+                    conn.execute(text(sql))
+                    print(f"✅ Migración PostgreSQL: inventory_items.{col_name} agregado")
+
+            movement_columns = {
+                "item_id": "ALTER TABLE inventory_movements ADD COLUMN item_id INTEGER;",
+                "charge_id": "ALTER TABLE inventory_movements ADD COLUMN charge_id INTEGER;",
+                "actor_doctor_id": "ALTER TABLE inventory_movements ADD COLUMN actor_doctor_id INTEGER;",
+                "movement_type": "ALTER TABLE inventory_movements ADD COLUMN movement_type VARCHAR NOT NULL DEFAULT 'adjustment';",
+                "quantity": "ALTER TABLE inventory_movements ADD COLUMN quantity NUMERIC(12,2) NOT NULL DEFAULT 0;",
+                "unit_cost": "ALTER TABLE inventory_movements ADD COLUMN unit_cost NUMERIC(12,2) NOT NULL DEFAULT 0;",
+                "total_cost": "ALTER TABLE inventory_movements ADD COLUMN total_cost NUMERIC(12,2) NOT NULL DEFAULT 0;",
+                "reference": "ALTER TABLE inventory_movements ADD COLUMN reference VARCHAR;",
+                "notes": "ALTER TABLE inventory_movements ADD COLUMN notes TEXT;",
+                "created_at": "ALTER TABLE inventory_movements ADD COLUMN created_at TIMESTAMP;",
+            }
+
+            for col_name, sql in movement_columns.items():
+                exists = conn.execute(text(f"""
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'inventory_movements' AND column_name = '{col_name}'
+                    LIMIT 1
+                """)).fetchone()
+                if not exists:
+                    conn.execute(text(sql))
+                    print(f"✅ Migración PostgreSQL: inventory_movements.{col_name} agregado")
+
+            supply_columns = {
+                "service_id": "ALTER TABLE service_supplies ADD COLUMN service_id INTEGER;",
+                "item_id": "ALTER TABLE service_supplies ADD COLUMN item_id INTEGER;",
+                "quantity": "ALTER TABLE service_supplies ADD COLUMN quantity NUMERIC(12,2) NOT NULL DEFAULT 0;",
+                "is_optional": "ALTER TABLE service_supplies ADD COLUMN is_optional BOOLEAN NOT NULL DEFAULT FALSE;",
+                "notes": "ALTER TABLE service_supplies ADD COLUMN notes TEXT;",
+                "created_at": "ALTER TABLE service_supplies ADD COLUMN created_at TIMESTAMP;",
+                "updated_at": "ALTER TABLE service_supplies ADD COLUMN updated_at TIMESTAMP;",
+            }
+
+            for col_name, sql in supply_columns.items():
+                exists = conn.execute(text(f"""
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'service_supplies' AND column_name = '{col_name}'
+                    LIMIT 1
+                """)).fetchone()
+                if not exists:
+                    conn.execute(text(sql))
+                    print(f"✅ Migración PostgreSQL: service_supplies.{col_name} agregado")
 
     except Exception as e:
         print("⚠️ Error en migración PostgreSQL:", repr(e))

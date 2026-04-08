@@ -30,6 +30,7 @@ class Doctor(Base):
     encounters = relationship("Encounter", back_populates="doctor")
     appointments = relationship("Appointment", back_populates="doctor")
     charges = relationship("Charge", back_populates="doctor")
+    inventory_movements = relationship("InventoryMovement", back_populates="actor_doctor")
 
 
 class Patient(Base):
@@ -193,6 +194,7 @@ class ServiceCatalog(Base):
     updated_at = Column(DateTime, nullable=True)
 
     charges = relationship("Charge", back_populates="service")
+    supply_links = relationship("ServiceSupply", back_populates="service", cascade="all, delete-orphan")
 
 
 class Charge(Base):
@@ -229,3 +231,69 @@ class Charge(Base):
 
     appointment = relationship("Appointment", back_populates="charge", uselist=False)
     encounter = relationship("Encounter", back_populates="charge", uselist=False)
+    inventory_movements = relationship("InventoryMovement", back_populates="charge")
+
+
+class InventoryItem(Base):
+    __tablename__ = "inventory_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, unique=True, index=True)
+    category = Column(String, nullable=True)
+    presentation = Column(String, nullable=True)
+    unit = Column(String, nullable=False, default="unidad")  # unidad | ml | vial | ampolla | caja | jeringa | par
+    current_stock = Column(Numeric(12, 2), nullable=False, default=0)
+    minimum_stock = Column(Numeric(12, 2), nullable=False, default=0)
+    reorder_point = Column(Numeric(12, 2), nullable=False, default=0)
+    average_cost = Column(Numeric(12, 2), nullable=False, default=0)
+    supplier = Column(String, nullable=True)
+    notes = Column(Text, nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, nullable=True)
+
+    movements = relationship("InventoryMovement", back_populates="item", cascade="all, delete-orphan")
+    service_links = relationship("ServiceSupply", back_populates="item", cascade="all, delete-orphan")
+
+
+class InventoryMovement(Base):
+    __tablename__ = "inventory_movements"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    item_id = Column(Integer, ForeignKey("inventory_items.id"), nullable=False, index=True)
+    charge_id = Column(Integer, ForeignKey("charges.id"), nullable=True, index=True)
+    actor_doctor_id = Column(Integer, ForeignKey("doctors.id"), nullable=True, index=True)
+
+    movement_type = Column(String, nullable=False, default="adjustment")  # purchase | manual_in | manual_out | procedure_use | correction
+    quantity = Column(Numeric(12, 2), nullable=False, default=0)
+    unit_cost = Column(Numeric(12, 2), nullable=False, default=0)
+    total_cost = Column(Numeric(12, 2), nullable=False, default=0)
+    reference = Column(String, nullable=True)
+    notes = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    item = relationship("InventoryItem", back_populates="movements")
+    charge = relationship("Charge", back_populates="inventory_movements")
+    actor_doctor = relationship("Doctor", back_populates="inventory_movements")
+
+
+class ServiceSupply(Base):
+    __tablename__ = "service_supplies"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    service_id = Column(Integer, ForeignKey("services.id"), nullable=False, index=True)
+    item_id = Column(Integer, ForeignKey("inventory_items.id"), nullable=False, index=True)
+
+    quantity = Column(Numeric(12, 2), nullable=False, default=0)
+    is_optional = Column(Boolean, nullable=False, default=False)
+    notes = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, nullable=True)
+
+    service = relationship("ServiceCatalog", back_populates="supply_links")
+    item = relationship("InventoryItem", back_populates="service_links")

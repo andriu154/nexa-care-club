@@ -39,7 +39,7 @@
 {% block content %}
 <style>
   .fin-grid{display:grid;gap:18px}
-  .fin-summary{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px}
+  .fin-summary{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:14px}
   .fin-card{background:#fff;border:1px solid #dbe6f3;border-radius:22px;box-shadow:0 10px 28px rgba(24,39,75,.10);overflow:hidden}
   .fin-head{padding:18px 20px;border-bottom:1px solid #e2ebf5;background:linear-gradient(180deg,#f8fbff 0%, #eff6ff 100%)}
   .fin-title{font-size:18px;font-weight:800;color:#163c7a}
@@ -47,7 +47,7 @@
   .fin-body{padding:18px}
   .fin-kpi{padding:18px;background:#fff;border:1px solid #dbe6f3;border-radius:20px;box-shadow:0 8px 18px rgba(24,39,75,.06)}
   .fin-kpi-label{font-size:12px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.04em}
-  .fin-kpi-value{margin-top:8px;font-size:28px;font-weight:800;color:#163c7a}
+  .fin-kpi-value{margin-top:8px;font-size:26px;font-weight:800;color:#163c7a}
   .fin-kpi-sub{margin-top:6px;font-size:12px;color:#6b7280}
   .fin-two{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:18px}
   .fin-three{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(340px,.8fr);gap:18px}
@@ -55,6 +55,7 @@
   .fin-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   .fin-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
   .fin-grid-4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px}
+  .fin-grid-5{display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr 1fr;gap:12px}
   .fin-table{width:100%;border-collapse:collapse}
   .fin-table th,.fin-table td{padding:12px 10px;border-bottom:1px solid #e5edf6;font-size:13px;text-align:left;vertical-align:top}
   .fin-table th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#64748b;font-weight:800}
@@ -63,20 +64,28 @@
   .pill-green{border-color:#bdeccf;background:#ecfff5;color:#087443}
   .pill-orange{border-color:#f8d79b;background:#fff7e8;color:#9a6700}
   .pill-red{border-color:#f4c6c8;background:#fff0f1;color:#b42318}
+  .pill-blue{border-color:#bfdbfe;background:#eff6ff;color:#1d4ed8}
   .fin-rank{display:grid;gap:10px}
   .fin-rank-item{border:1px solid #dbe6f3;background:#fff;border-radius:16px;padding:12px 14px;display:flex;justify-content:space-between;gap:12px;align-items:center}
   .fin-rank-name{font-size:14px;font-weight:800;color:#163c7a}
   .fin-rank-value{font-size:14px;font-weight:800;color:#0b4dbb}
   .fin-rank-meta{font-size:12px;color:#6b7280;margin-top:3px}
   .alert-ok{border-color:#bdeccf !important;background:#ecfff5 !important;color:#087443 !important}
-  .fin-service-edit{display:grid;gap:8px}
-  .fin-service-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .fin-service-edit,.fin-item-edit{display:grid;gap:8px}
+  .fin-service-actions,.fin-inline-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .fin-icon-btn{min-width:auto;padding:10px 12px;line-height:1}
   .fin-money-positive{font-weight:800;color:#087443}
   .fin-money-neutral{font-weight:800;color:#163c7a}
   .fin-money-expense{font-weight:800;color:#9a6700}
-  @media (max-width:1380px){.fin-summary{grid-template-columns:repeat(3,minmax(0,1fr))}.fin-two,.fin-three{grid-template-columns:1fr}}
-  @media (max-width:900px){.fin-grid-2,.fin-grid-3,.fin-grid-4,.fin-summary{grid-template-columns:1fr}}
+  .fin-muted{font-size:12px;color:#64748b}
+  .fin-stack{display:grid;gap:10px}
+  .fin-supply-list{display:grid;gap:8px;margin-top:10px}
+  .fin-supply-item{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;border:1px dashed #d7e3f3;border-radius:14px;padding:10px 12px;background:#f8fbff}
+  .fin-section-gap{height:18px}
+  .fin-warning-box{border:1px solid #fed7aa;background:#fff7ed;color:#9a3412;border-radius:16px;padding:14px}
+  @media (max-width:1600px){.fin-summary{grid-template-columns:repeat(4,minmax(0,1fr))}}
+  @media (max-width:1380px){.fin-two,.fin-three{grid-template-columns:1fr}}
+  @media (max-width:900px){.fin-grid-2,.fin-grid-3,.fin-grid-4,.fin-grid-5,.fin-summary{grid-template-columns:1fr}}
 </style>
 
 <div class="fin-grid">
@@ -98,7 +107,7 @@
     <div class="fin-kpi">
       <div class="fin-kpi-label">Egresos pagados del mes</div>
       <div class="fin-kpi-value">${{ '%.2f'|format(summary.paid_expense_total) }}</div>
-      <div class="fin-kpi-sub">Suma de inversión real registrada</div>
+      <div class="fin-kpi-sub">Costo real total registrado</div>
     </div>
 
     <div class="fin-kpi">
@@ -110,7 +119,7 @@
     <div class="fin-kpi">
       <div class="fin-kpi-label">Cobrado hoy</div>
       <div class="fin-kpi-value">${{ '%.2f'|format(summary.paid_today) }}</div>
-      <div class="fin-kpi-sub">Solo cobros marcados como pagados</div>
+      <div class="fin-kpi-sub">Solo cobros pagados</div>
     </div>
 
     <div class="fin-kpi">
@@ -122,16 +131,37 @@
     <div class="fin-kpi">
       <div class="fin-kpi-label">Registros del mes</div>
       <div class="fin-kpi-value">{{ summary.charge_count }}</div>
-      <div class="fin-kpi-sub">Incluye pagados, pendientes y anulados</div>
+      <div class="fin-kpi-sub">Pagados, pendientes y anulados</div>
+    </div>
+
+    <div class="fin-kpi">
+      <div class="fin-kpi-label">Insumos activos</div>
+      <div class="fin-kpi-value">{{ summary.inventory_total_items }}</div>
+      <div class="fin-kpi-sub">Inventario editable</div>
+    </div>
+
+    <div class="fin-kpi">
+      <div class="fin-kpi-label">Stock bajo</div>
+      <div class="fin-kpi-value">{{ summary.inventory_low_stock_count }}</div>
+      <div class="fin-kpi-sub">Alertas de reposición</div>
     </div>
   </div>
+
+  {% if low_stock_items %}
+    <div class="fin-warning-box">
+      <strong>Atención:</strong> hay {{ low_stock_items|length }} insumo(s) en stock bajo.
+      {% for item in low_stock_items[:6] %}
+        <div style="margin-top:6px;">• {{ item.name }} — stock {{ '%.2f'|format(item.current_stock|float) }} {{ item.unit }}</div>
+      {% endfor %}
+    </div>
+  {% endif %}
 
   <div class="fin-two">
     <section class="fin-card">
       <div class="fin-head">
         <div class="fin-title">Registrar cobro</div>
         <div class="fin-sub">
-          Crea cobros manuales por consulta, procedimiento o documento.
+          Si el servicio tiene insumos vinculados, el inventario se descuenta automáticamente al guardar el cobro.
           {% if selected_patient %}
             Paciente preseleccionado: {{ selected_patient.full_name }}
           {% endif %}
@@ -202,6 +232,7 @@
             <div>
               <label class="label">Inversión real</label>
               <input class="input" id="charge-expense" type="number" step="0.01" min="0" name="expense_amount" value="{{ form_defaults.expense_amount }}">
+              <div class="fin-muted">Si lo dejas en 0, intentará usar costo del inventario o costo base del servicio.</div>
             </div>
 
             <div>
@@ -244,8 +275,76 @@
 
     <section class="fin-card">
       <div class="fin-head">
-        <div class="fin-title">Catálogo de servicios</div>
-        <div class="fin-sub">Define el precio de venta y un costo base estimado para autollenar la inversión por procedimiento.</div>
+        <div class="fin-title">Crear insumo de inventario</div>
+        <div class="fin-sub">Registra insumos, su stock, punto mínimo y costo promedio.</div>
+      </div>
+
+      <div class="fin-body">
+        <form method="post" action="/app/finances/inventory/create" class="fin-form">
+          <div class="fin-grid-4">
+            <div>
+              <label class="label">Nombre</label>
+              <input class="input" type="text" name="name" placeholder="Ej: Ácido hialurónico 1 ml" required>
+            </div>
+            <div>
+              <label class="label">Categoría</label>
+              <input class="input" type="text" name="category" placeholder="Ej: Rellenos">
+            </div>
+            <div>
+              <label class="label">Presentación</label>
+              <input class="input" type="text" name="presentation" placeholder="Ej: Jeringa 1 ml">
+            </div>
+            <div>
+              <label class="label">Unidad</label>
+              <select class="input" name="unit">
+                {% for unit in allowed_units %}
+                  <option value="{{ unit }}">{{ unit|capitalize }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <div class="fin-grid-4">
+            <div>
+              <label class="label">Stock actual</label>
+              <input class="input" type="number" step="0.01" min="0" name="current_stock" value="0">
+            </div>
+            <div>
+              <label class="label">Stock mínimo</label>
+              <input class="input" type="number" step="0.01" min="0" name="minimum_stock" value="0">
+            </div>
+            <div>
+              <label class="label">Punto de reposición</label>
+              <input class="input" type="number" step="0.01" min="0" name="reorder_point" value="0">
+            </div>
+            <div>
+              <label class="label">Costo promedio</label>
+              <input class="input" type="number" step="0.01" min="0" name="average_cost" value="0">
+            </div>
+          </div>
+
+          <div class="fin-grid-2">
+            <div>
+              <label class="label">Proveedor</label>
+              <input class="input" type="text" name="supplier" placeholder="Opcional">
+            </div>
+            <div>
+              <label class="label">Notas</label>
+              <input class="input" type="text" name="notes" placeholder="Opcional">
+            </div>
+          </div>
+
+          <button class="btn btn-outline" type="submit">Guardar insumo</button>
+        </form>
+      </div>
+    </section>
+  </div>
+
+  <div class="fin-two">
+    <section class="fin-card">
+      <div class="fin-head">
+        <div class="fin-title">Catálogo de servicios + receta de insumos</div>
+        <div class="fin-sub">Cada servicio puede tener insumos vinculados. El costo base se recalcula con el inventario.</div>
       </div>
 
       <div class="fin-body">
@@ -275,7 +374,7 @@
           <button class="btn btn-outline" type="submit">Guardar servicio</button>
         </form>
 
-        <div style="height:18px;"></div>
+        <div class="fin-section-gap"></div>
 
         <div class="fin-table-wrap">
           <table class="fin-table">
@@ -342,11 +441,212 @@
                         {% endif %}
                       </div>
                     </form>
+
+                    <div class="fin-supply-list">
+                      {% for link in s.supply_links %}
+                        <div class="fin-supply-item">
+                          <div>
+                            <strong>{{ link.item.name if link.item else 'Insumo' }}</strong>
+                            <div class="fin-muted">
+                              {{ '%.2f'|format(link.quantity|float) }} {{ link.item.unit if link.item else 'unidad' }}
+                              {% if link.item %} · costo aprox ${{ '%.2f'|format((link.quantity|float) * (link.item.average_cost|float)) }}{% endif %}
+                              {% if link.is_optional %} · opcional{% endif %}
+                            </div>
+                            {% if link.notes %}
+                              <div class="fin-muted">{{ link.notes }}</div>
+                            {% endif %}
+                          </div>
+
+                          <form method="post" action="/app/finances/services/{{ s.id }}/supplies/{{ link.id }}/delete">
+                            <button class="btn btn-danger btn-sm" type="submit">Quitar</button>
+                          </form>
+                        </div>
+                      {% else %}
+                        <div class="fin-muted">Aún no hay insumos vinculados a este servicio.</div>
+                      {% endfor %}
+                    </div>
+
+                    <div class="fin-section-gap"></div>
+
+                    <form method="post" action="/app/finances/services/{{ s.id }}/supplies/add" class="fin-form">
+                      <div class="fin-grid-4">
+                        <div>
+                          <label class="label">Agregar insumo</label>
+                          <select class="input" name="item_id" required>
+                            <option value="">Seleccionar insumo</option>
+                            {% for item in inventory_items %}
+                              {% if item.is_active %}
+                                <option value="{{ item.id }}">
+                                  {{ item.name }} · stock {{ '%.2f'|format(item.current_stock|float) }} {{ item.unit }} · costo ${{ '%.2f'|format(item.average_cost|float) }}
+                                </option>
+                              {% endif %}
+                            {% endfor %}
+                          </select>
+                        </div>
+                        <div>
+                          <label class="label">Cantidad a usar</label>
+                          <input class="input" type="number" step="0.01" min="0" name="quantity" placeholder="Ej: 1 o 0.5" required>
+                        </div>
+                        <div>
+                          <label class="label">Opcional</label>
+                          <label style="display:flex; align-items:center; gap:8px; padding-top:12px;">
+                            <input type="checkbox" name="is_optional" value="1">
+                            Marcar como opcional
+                          </label>
+                        </div>
+                        <div>
+                          <label class="label">Notas</label>
+                          <input class="input" type="text" name="notes" placeholder="Ej: solo si requiere retoque">
+                        </div>
+                      </div>
+                      <button class="btn btn-outline btn-sm" type="submit">Vincular insumo</button>
+                    </form>
                   </td>
                 </tr>
               {% else %}
                 <tr>
                   <td colspan="6">No hay servicios registrados.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="fin-card">
+      <div class="fin-head">
+        <div class="fin-title">Inventario de insumos</div>
+        <div class="fin-sub">Edita stock, costos y registra entradas o salidas manuales.</div>
+      </div>
+
+      <div class="fin-body">
+        <div class="fin-table-wrap">
+          <table class="fin-table">
+            <thead>
+              <tr>
+                <th>Insumo</th>
+                <th>Presentación</th>
+                <th>Stock</th>
+                <th>Costos y control</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in inventory_items %}
+                <tr>
+                  <td colspan="5">
+                    <form method="post" action="/app/finances/inventory/{{ item.id }}/update" class="fin-item-edit">
+                      <div class="fin-grid-5">
+                        <div>
+                          <label class="label">Nombre</label>
+                          <input class="input" type="text" name="name" value="{{ item.name }}" required>
+                        </div>
+                        <div>
+                          <label class="label">Categoría</label>
+                          <input class="input" type="text" name="category" value="{{ item.category or '' }}">
+                        </div>
+                        <div>
+                          <label class="label">Presentación</label>
+                          <input class="input" type="text" name="presentation" value="{{ item.presentation or '' }}">
+                        </div>
+                        <div>
+                          <label class="label">Unidad</label>
+                          <select class="input" name="unit">
+                            {% for unit in allowed_units %}
+                              <option value="{{ unit }}" {% if item.unit == unit %}selected{% endif %}>{{ unit|capitalize }}</option>
+                            {% endfor %}
+                          </select>
+                        </div>
+                        <div>
+                          <label class="label">Proveedor</label>
+                          <input class="input" type="text" name="supplier" value="{{ item.supplier or '' }}">
+                        </div>
+                      </div>
+
+                      <div class="fin-grid-4">
+                        <div>
+                          <label class="label">Stock actual</label>
+                          <input class="input" type="number" step="0.01" min="-999999" name="current_stock" value="{{ '%.2f'|format(item.current_stock|float) }}">
+                        </div>
+                        <div>
+                          <label class="label">Stock mínimo</label>
+                          <input class="input" type="number" step="0.01" min="0" name="minimum_stock" value="{{ '%.2f'|format(item.minimum_stock|float) }}">
+                        </div>
+                        <div>
+                          <label class="label">Punto de reposición</label>
+                          <input class="input" type="number" step="0.01" min="0" name="reorder_point" value="{{ '%.2f'|format(item.reorder_point|float) }}">
+                        </div>
+                        <div>
+                          <label class="label">Costo promedio</label>
+                          <input class="input" type="number" step="0.01" min="0" name="average_cost" value="{{ '%.2f'|format(item.average_cost|float) }}">
+                        </div>
+                      </div>
+
+                      <div class="fin-grid-2">
+                        <div>
+                          <label class="label">Notas</label>
+                          <input class="input" type="text" name="notes" value="{{ item.notes or '' }}">
+                        </div>
+                        <div class="fin-inline-actions" style="padding-top:30px;">
+                          <label style="display:inline-flex; align-items:center; gap:8px; font-weight:700; color:#334155;">
+                            <input type="checkbox" name="is_active" value="1" {% if item.is_active %}checked{% endif %}>
+                            Activo
+                          </label>
+
+                          <button class="btn btn-outline btn-sm" type="submit">Actualizar insumo</button>
+
+                          {% if item.is_low_stock %}
+                            <span class="fin-pill pill-orange">Stock bajo</span>
+                          {% else %}
+                            <span class="fin-pill pill-blue">Stock normal</span>
+                          {% endif %}
+                        </div>
+                      </div>
+                    </form>
+
+                    <div class="fin-section-gap"></div>
+
+                    <form method="post" action="/app/finances/inventory/{{ item.id }}/movement" class="fin-form">
+                      <div class="fin-grid-4">
+                        <div>
+                          <label class="label">Tipo de movimiento</label>
+                          <select class="input" name="movement_type">
+                            <option value="purchase">Compra / ingreso con costo</option>
+                            <option value="manual_in">Ingreso manual</option>
+                            <option value="manual_out">Salida manual</option>
+                            <option value="correction">Corrección</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label class="label">Cantidad</label>
+                          <input class="input" type="number" step="0.01" min="0" name="quantity" required>
+                        </div>
+                        <div>
+                          <label class="label">Costo unitario</label>
+                          <input class="input" type="number" step="0.01" min="0" name="unit_cost" value="{{ '%.2f'|format(item.average_cost|float) }}">
+                        </div>
+                        <div>
+                          <label class="label">Referencia</label>
+                          <input class="input" type="text" name="reference" placeholder="Factura, compra, ajuste...">
+                        </div>
+                      </div>
+
+                      <div class="fin-grid-2">
+                        <div>
+                          <label class="label">Notas</label>
+                          <input class="input" type="text" name="notes" placeholder="Observación opcional">
+                        </div>
+                        <div style="padding-top:30px;">
+                          <button class="btn btn-outline btn-sm" type="submit">Registrar movimiento</button>
+                        </div>
+                      </div>
+                    </form>
+                  </td>
+                </tr>
+              {% else %}
+                <tr>
+                  <td colspan="5">No hay insumos registrados todavía.</td>
                 </tr>
               {% endfor %}
             </tbody>
@@ -360,7 +660,7 @@
     <section class="fin-card">
       <div class="fin-head">
         <div class="fin-title">Cobros recientes del mes</div>
-        <div class="fin-sub">Ahora cada cobro también muestra inversión real y ganancia neta.</div>
+        <div class="fin-sub">Cada cobro muestra ingreso, egreso y ganancia neta.</div>
       </div>
 
       <div class="fin-body">
@@ -435,7 +735,7 @@
     <section class="fin-card">
       <div class="fin-head">
         <div class="fin-title">Rankings del mes</div>
-        <div class="fin-sub">Se calculan solo con cobros pagados. En servicios verás ingreso, egreso y ganancia por procedimiento.</div>
+        <div class="fin-sub">Se calculan solo con cobros pagados. En servicios ves ingreso, egreso y ganancia por procedimiento.</div>
       </div>
 
       <div class="fin-body">
@@ -451,7 +751,7 @@
           {% endfor %}
         </div>
 
-        <div style="height:18px;"></div>
+        <div class="fin-section-gap"></div>
 
         <div class="fin-title" style="font-size:15px; margin-bottom:10px;">Por procedimiento</div>
         <div class="fin-rank">
@@ -474,6 +774,65 @@
       </div>
     </section>
   </div>
+
+  <section class="fin-card">
+    <div class="fin-head">
+      <div class="fin-title">Movimientos recientes de inventario</div>
+      <div class="fin-sub">Entradas, salidas manuales y consumos automáticos por procedimiento.</div>
+    </div>
+
+    <div class="fin-body">
+      <div class="fin-table-wrap">
+        <table class="fin-table">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Insumo</th>
+              <th>Tipo</th>
+              <th>Cantidad</th>
+              <th>Costo</th>
+              <th>Referencia</th>
+              <th>Usuario</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for m in inventory_movements %}
+              <tr>
+                <td>{{ m.created_at.strftime("%Y-%m-%d %H:%M") if m.created_at else "—" }}</td>
+                <td>{{ m.item.name if m.item else "—" }}</td>
+                <td>
+                  {% if m.movement_type == 'procedure_use' %}
+                    <span class="fin-pill pill-orange">Consumo por procedimiento</span>
+                  {% elif m.movement_type == 'purchase' %}
+                    <span class="fin-pill pill-green">Compra</span>
+                  {% elif m.movement_type == 'manual_in' %}
+                    <span class="fin-pill pill-blue">Ingreso manual</span>
+                  {% elif m.movement_type == 'manual_out' %}
+                    <span class="fin-pill">Salida manual</span>
+                  {% else %}
+                    <span class="fin-pill">Corrección</span>
+                  {% endif %}
+                </td>
+                <td>{{ '%.2f'|format(m.quantity|float) }} {% if m.item %}{{ m.item.unit }}{% endif %}</td>
+                <td>${{ '%.2f'|format(m.total_cost|float) }}</td>
+                <td>
+                  {{ m.reference or "—" }}
+                  {% if m.notes %}
+                    <div class="fin-muted">{{ m.notes }}</div>
+                  {% endif %}
+                </td>
+                <td>{{ m.actor_doctor.name if m.actor_doctor else "Sistema" }}</td>
+              </tr>
+            {% else %}
+              <tr>
+                <td colspan="7">No hay movimientos de inventario todavía.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
 </div>
 
 <script>
