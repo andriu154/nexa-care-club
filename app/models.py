@@ -187,6 +187,7 @@ class ServiceCatalog(Base):
     name = Column(String, nullable=False, unique=True, index=True)
     category = Column(String, nullable=True)
     base_price = Column(Numeric(10, 2), nullable=False, default=0)
+    base_cost = Column(Numeric(10, 2), nullable=False, default=0)
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, nullable=True)
@@ -211,6 +212,7 @@ class Charge(Base):
     subtotal = Column(Numeric(10, 2), nullable=False, default=0)
     discount = Column(Numeric(10, 2), nullable=False, default=0)
     total = Column(Numeric(10, 2), nullable=False, default=0)
+    expense_amount = Column(Numeric(10, 2), nullable=False, default=0)
 
     payment_method = Column(String, nullable=False, default="efectivo")
     payment_status = Column(String, nullable=False, default="pendiente")  # pagado | pendiente | anulado
