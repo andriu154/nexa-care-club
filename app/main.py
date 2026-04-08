@@ -1,7 +1,7 @@
 # app/main.py
 from datetime import datetime
 from fastapi import FastAPI, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 import os
@@ -644,6 +644,8 @@ async def enforce_password_change(request: Request, call_next):
     path = request.url.path
 
     exempt_prefixes = (
+        "/",
+        "/health",
         "/login",
         "/logout",
         "/change-password",
@@ -700,6 +702,21 @@ app.include_router(finances_ui_router)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 
-@app.get("/")
-def root():
+@app.get("/", include_in_schema=False)
+async def root():
     return {"status": "ok", "message": "NexaCenter funcionando ✅"}
+
+
+@app.head("/", include_in_schema=False)
+async def root_head():
+    return JSONResponse(status_code=200, content={})
+
+
+@app.get("/health", include_in_schema=False)
+async def health():
+    return {"status": "ok"}
+
+
+@app.head("/health", include_in_schema=False)
+async def health_head():
+    return JSONResponse(status_code=200, content={})
