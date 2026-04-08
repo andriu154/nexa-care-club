@@ -376,158 +376,6 @@
             {% else %}
               <tr>
                 <td colspan="5">No hay insumos registrados todavía.</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </section>
-
-  <div class="inv-three">
-    <section class="inv-card">
-      <div class="inv-head">
-        <div class="inv-title">Servicios y receta de insumos</div>
-        <div class="inv-sub">Cada servicio puede consumir insumos automáticamente al registrar un cobro o procedimiento.</div>
-      </div>
-
-      <div class="inv-body">
-        <div class="inv-table-wrap">
-          <table class="inv-table">
-            <thead>
-              <tr>
-                <th>Servicio</th>
-                <th>Categoría</th>
-                <th>Precio base</th>
-                <th>Costo base</th>
-                <th>Estado</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for s in services %}
-                <tr>
-                  <td colspan="6">
-                    <form method="post" action="/app/finances/services/{{ s.id }}/update" class="inv-service-edit">
-                      <div class="inv-grid-4">
-                        <div>
-                          <label class="label">Servicio</label>
-                          <input class="input" type="text" name="name" value="{{ s.name }}" required>
-                        </div>
-
-                        <div>
-                          <label class="label">Categoría</label>
-                          <input class="input" type="text" name="category" value="{{ s.category if s.category else '' }}" required>
-                        </div>
-
-                        <div>
-                          <label class="label">Precio base</label>
-                          <input class="input" type="number" step="0.01" min="0" name="base_price" value="{{ '%.2f'|format(s.base_price|float) }}" required>
-                        </div>
-
-                        <div>
-                          <label class="label">Costo base estimado</label>
-                          <input class="input" type="number" step="0.01" min="0" name="base_cost" value="{{ '%.2f'|format((s.base_cost or 0)|float) }}">
-                        </div>
-                      </div>
-
-                      <div class="inv-service-actions">
-                        <label style="display:inline-flex; align-items:center; gap:8px; font-weight:700; color:#334155;">
-                          <input type="checkbox" name="is_active" value="1" {% if s.is_active %}checked{% endif %}>
-                          Activo
-                        </label>
-
-                        <button class="btn btn-outline btn-sm" type="submit">Actualizar servicio</button>
-
-                        <button
-                          class="btn btn-danger btn-sm"
-                          type="submit"
-                          formaction="/app/finances/services/{{ s.id }}/delete"
-                          formmethod="post"
-                          onclick="return confirm('¿Seguro que deseas eliminar este servicio?');"
-                        >
-                          Eliminar
-                        </button>
-
-                        {% if s.is_active %}
-                          <span class="inv-pill pill-green">Activo</span>
-                        {% else %}
-                          <span class="inv-pill">Inactivo</span>
-                        {% endif %}
-                      </div>
-                    </form>
-
-                    <div class="inv-supply-list">
-                      {% for link in s.supply_links %}
-                        <div class="inv-supply-item">
-                          <div>
-                            <strong>{{ link.item.name if link.item else 'Insumo' }}</strong>
-                            <div class="inv-muted">
-                              {{ '%.2f'|format(link.quantity|float) }} {{ link.item.unit if link.item else 'unidad' }}
-                              {% if link.item %}
-                                · costo aprox ${{ '%.2f'|format((link.quantity|float) * (link.item.average_cost|float)) }}
-                              {% endif %}
-                              {% if link.is_optional %} · opcional{% endif %}
-                            </div>
-                            {% if link.notes %}
-                              <div class="inv-muted">{{ link.notes }}</div>
-                            {% endif %}
-                          </div>
-
-                          <form method="post" action="/app/finances/services/{{ s.id }}/supplies/{{ link.id }}/delete">
-                            <button class="btn btn-danger btn-sm" type="submit">Quitar</button>
-                          </form>
-                        </div>
-                      {% else %}
-                        <div class="inv-empty">Aún no hay insumos vinculados a este servicio.</div>
-                      {% endfor %}
-                    </div>
-
-                    <div class="inv-section-gap"></div>
-
-                    <form method="post" action="/app/finances/services/{{ s.id }}/supplies/add" class="inv-form">
-                      <div class="inv-grid-4">
-                        <div>
-                          <label class="label">Agregar insumo</label>
-                          <select class="input" name="item_id" required>
-                            <option value="">Seleccionar insumo</option>
-                            {% for item in inventory_items %}
-                              {% if item.is_active %}
-                                <option value="{{ item.id }}">
-                                  {{ item.name }} · stock {{ '%.2f'|format(item.current_stock|float) }} {{ item.unit }} · costo ${{ '%.2f'|format(item.average_cost|float) }}
-                                </option>
-                              {% endif %}
-                            {% endfor %}
-                          </select>
-                        </div>
-
-                        <div>
-                          <label class="label">Cantidad a usar</label>
-                          <input class="input" type="number" step="0.01" min="0" name="quantity" placeholder="Ej: 1 o 0.5" required>
-                        </div>
-
-                        <div>
-                          <label class="label">Opcional</label>
-                          <label style="display:flex; align-items:center; gap:8px; padding-top:12px;">
-                            <input type="checkbox" name="is_optional" value="1">
-                            Marcar como opcional
-                          </label>
-                        </div>
-
-                        <div>
-                          <label class="label">Notas</label>
-                          <input class="input" type="text" name="notes" placeholder="Ej: solo si requiere retoque">
-                        </div>
-                      </div>
-
-                      <button class="btn btn-outline btn-sm" type="submit">Vincular insumo</button>
-                    </form>
-                  </td>
-                </tr>
-              {% else %}
-                <tr>
-                  <td colspan="6">No hay servicios registrados.</td>
-                </tr>
               {% endfor %}
             </tbody>
           </table>
@@ -535,28 +383,179 @@
       </div>
     </section>
 
-    <section class="inv-card">
-      <div class="inv-head">
-        <div class="inv-title">Resumen de stock bajo</div>
-        <div class="inv-sub">Vista rápida para reposición y control.</div>
-      </div>
+    <div class="inv-three">
+      <section class="inv-card">
+        <div class="inv-head">
+          <div class="inv-title">Servicios y receta de insumos</div>
+          <div class="inv-sub">Cada servicio puede consumir insumos automáticamente al registrar un cobro o procedimiento.</div>
+        </div>
 
-      <div class="inv-body">
-        {% for item in low_stock_items %}
-          <div style="padding:12px 0; border-bottom:1px solid #e5edf6;">
-            <div class="inv-tag-warn">{{ item.name }}</div>
-            <div class="inv-muted">
-              Stock actual: {{ '%.2f'|format(item.current_stock|float) }} {{ item.unit }}
-            </div>
-            <div class="inv-muted">
-              Mínimo: {{ '%.2f'|format(item.minimum_stock|float) }} · Reposición: {{ '%.2f'|format(item.reorder_point|float) }}
-            </div>
+        <div class="inv-body">
+          <div class="inv-table-wrap">
+            <table class="inv-table">
+              <thead>
+                <tr>
+                  <th>Servicio</th>
+                  <th>Categoría</th>
+                  <th>Precio base</th>
+                  <th>Costo base</th>
+                  <th>Estado</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for s in services %}
+                  <tr>
+                    <td colspan="6">
+                      <form method="post" action="/app/finances/services/{{ s.id }}/update" class="inv-service-edit">
+                        <div class="inv-grid-4">
+                          <div>
+                            <label class="label">Servicio</label>
+                            <input class="input" type="text" name="name" value="{{ s.name }}" required>
+                          </div>
+
+                          <div>
+                            <label class="label">Categoría</label>
+                            <input class="input" type="text" name="category" value="{{ s.category if s.category else '' }}" required>
+                          </div>
+
+                          <div>
+                            <label class="label">Precio base</label>
+                            <input class="input" type="number" step="0.01" min="0" name="base_price" value="{{ '%.2f'|format(s.base_price|float) }}" required>
+                          </div>
+
+                          <div>
+                            <label class="label">Costo base estimado</label>
+                            <input class="input" type="number" step="0.01" min="0" name="base_cost" value="{{ '%.2f'|format((s.base_cost or 0)|float) }}">
+                          </div>
+                        </div>
+
+                        <div class="inv-service-actions">
+                          <label style="display:inline-flex; align-items:center; gap:8px; font-weight:700; color:#334155;">
+                            <input type="checkbox" name="is_active" value="1" {% if s.is_active %}checked{% endif %}>
+                            Activo
+                          </label>
+
+                          <button class="btn btn-outline btn-sm" type="submit">Actualizar servicio</button>
+
+                          <button
+                            class="btn btn-danger btn-sm"
+                            type="submit"
+                            formaction="/app/finances/services/{{ s.id }}/delete"
+                            formmethod="post"
+                            onclick="return confirm('¿Seguro que deseas eliminar este servicio?');"
+                          >
+                            Eliminar
+                          </button>
+
+                          {% if s.is_active %}
+                            <span class="inv-pill pill-green">Activo</span>
+                          {% else %}
+                            <span class="inv-pill">Inactivo</span>
+                          {% endif %}
+                        </div>
+                      </form>
+
+                      <div class="inv-supply-list">
+                        {% for link in s.supply_links %}
+                          <div class="inv-supply-item">
+                            <div>
+                              <strong>{{ link.item.name if link.item else 'Insumo' }}</strong>
+                              <div class="inv-muted">
+                                {{ '%.2f'|format(link.quantity|float) }} {{ link.item.unit if link.item else 'unidad' }}
+                                {% if link.item %}
+                                  · costo aprox ${{ '%.2f'|format((link.quantity|float) * (link.item.average_cost|float)) }}
+                                {% endif %}
+                                {% if link.is_optional %} · opcional{% endif %}
+                              </div>
+                              {% if link.notes %}
+                                <div class="inv-muted">{{ link.notes }}</div>
+                              {% endif %}
+                            </div>
+
+                            <form method="post" action="/app/finances/services/{{ s.id }}/supplies/{{ link.id }}/delete">
+                              <button class="btn btn-danger btn-sm" type="submit">Quitar</button>
+                            </form>
+                          </div>
+                        {% else %}
+                          <div class="inv-empty">Aún no hay insumos vinculados a este servicio.</div>
+                        {% endfor %}
+                      </div>
+
+                      <div class="inv-section-gap"></div>
+
+                      <form method="post" action="/app/finances/services/{{ s.id }}/supplies/add" class="inv-form">
+                        <div class="inv-grid-4">
+                          <div>
+                            <label class="label">Agregar insumo</label>
+                            <select class="input" name="item_id" required>
+                              <option value="">Seleccionar insumo</option>
+                              {% for item in inventory_items %}
+                                {% if item.is_active %}
+                                  <option value="{{ item.id }}">
+                                    {{ item.name }} · stock {{ '%.2f'|format(item.current_stock|float) }} {{ item.unit }} · costo ${{ '%.2f'|format(item.average_cost|float) }}
+                                  </option>
+                                {% endif %}
+                              {% endfor %}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label class="label">Cantidad a usar</label>
+                            <input class="input" type="number" step="0.01" min="0" name="quantity" placeholder="Ej: 1 o 0.5" required>
+                          </div>
+
+                          <div>
+                            <label class="label">Opcional</label>
+                            <label style="display:flex; align-items:center; gap:8px; padding-top:12px;">
+                              <input type="checkbox" name="is_optional" value="1">
+                              Marcar como opcional
+                            </label>
+                          </div>
+
+                          <div>
+                            <label class="label">Notas</label>
+                            <input class="input" type="text" name="notes" placeholder="Ej: solo si requiere retoque">
+                          </div>
+                        </div>
+
+                        <button class="btn btn-outline btn-sm" type="submit">Vincular insumo</button>
+                      </form>
+                    </td>
+                  </tr>
+                {% else %}
+                  <tr>
+                    <td colspan="6">No hay servicios registrados.</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
           </div>
-        {% else %}
-          <div class="inv-empty">No hay alertas de stock bajo en este momento.</div>
-        {% endfor %}
-      </div>
-    </section>
-  </div>
+        </div>
+      </section>
+
+      <section class="inv-card">
+        <div class="inv-head">
+          <div class="inv-title">Resumen de stock bajo</div>
+          <div class="inv-sub">Vista rápida para reposición y control.</div>
+        </div>
+
+        <div class="inv-body">
+          {% for item in low_stock_items %}
+            <div style="padding:12px 0; border-bottom:1px solid #e5edf6;">
+              <div class="inv-tag-warn">{{ item.name }}</div>
+              <div class="inv-muted">
+                Stock actual: {{ '%.2f'|format(item.current_stock|float) }} {{ item.unit }}
+              </div>
+              <div class="inv-muted">
+                Mínimo: {{ '%.2f'|format(item.minimum_stock|float) }} · Reposición: {{ '%.2f'|format(item.reorder_point|float) }}
+              </div>
+            </div>
+          {% else %}
+            <div class="inv-empty">No hay alertas de stock bajo en este momento.</div>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
 </div>
 {% endblock %}
